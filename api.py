@@ -242,9 +242,16 @@ async def upload_file(file: UploadFile = File(...), user=Depends(current_user)):
         raise HTTPException(status_code=413, detail="File is larger than 10 MB.")
     try:
         path = save_upload(file.filename, content, user_id=user["id"])
+        indexed_chunks=0
+        candidate=_safe_path(path,user["id"])
+        if is_supported_document(candidate):
+            document_text=extract_and_limit(candidate)
+            indexed_chunks=index_document(path,document_text,user_id=user["id"],replace_source=True)
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
     except Exception as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc
-    return {"path": path, "filename": file.filename, "content_type": file.content_type, "size": len(content)}
+    return {"path": path, "filename": file.filename, "content_type": file.content_type, "size": len(content), "indexed_chunks": indexed_chunks}
 
 
 @app.get("/api/v1/files/{path:path}")
