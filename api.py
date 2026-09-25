@@ -15,7 +15,7 @@ from pydantic import BaseModel, Field
 from agent import MODEL, VISION_MODEL, run_agent, stream_agent
 from config import ALLOW_SHELL, FILE_ROOT, ensure_directories
 from tools import init_db, recall_memories, remember_fact, load_history, list_sessions, set_chat_title, get_chat_title, delete_chat, remove_last_assistant, remove_last_turn, save_turn
-from memory import index_document, search_rag, rag_source_status
+from memory import index_document, search_rag, rag_source_status, delete_semantic_memory, delete_rag_source, remember_semantic
 from auth import authenticate, create_session, create_user, get_user, init_auth_db, revoke_session
 from multimodal import save_upload, read_upload, image_data_url, _safe_path
 from mcp_registry import registry_snapshot
@@ -368,7 +368,22 @@ def get_chat(session_id: str, user=Depends(current_user)):
 @app.post("/api/v1/memories", response_model=MemoryResponse)
 def create_memory(request: MemoryRequest, user=Depends(current_user)):
     remember_fact(request.fact, source=request.source, user_id=user["id"])
+    try:
+        remember_semantic(request.fact, source=request.source, user_id=user["id"])
+    except Exception as exc:
+        logger.warning("Semantic memory indexing failed: %s", exc)
     return MemoryResponse(saved=True, fact=request.fact)
+
+@app.delete("/api/v1/memories")
+def delete_memory(fact: str, user=Depends(current_user)):
+    if not fact.strip():
+        raise HTTPException(status_code=400, detail="Fact cannot be empty.")
+    exact = fact.strip()
+    deleted_exact = delete_semantic_memory(exact, user_id=user["id"])
+    with __import__("db").connect(__import__("config").DB_PATH) as con:
+        cur = con.execute("DELETE FROM memories WHERE user_id=? AND fact=?", (user["id"], exact))
+        deleted = cur.rowcount > 0 or deleted_exact
+    return {"deleted": deleted, "fact": exact}
 
 
 @app.get("/api/v1/memories")
@@ -517,6 +532,7 @@ def delete_file(path: str, user=Depends(current_user)):
         if not candidate.is_file():
             raise FileNotFoundError(path)
         candidate.unlink()
-        return {"deleted": True, "path": path}
+        deleted_chunks = delete_rag_source(path, user_id=user["id"])
+        return {"deleted": True, "path": path, "rag_chunks_deleted": deleted_chunks}
     except (FileNotFoundError, PermissionError) as exc:
         raise HTTPException(status_code=404, detail="File not found.") from exc
