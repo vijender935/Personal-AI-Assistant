@@ -5,7 +5,7 @@ pytest
 fastapi
 uvicorn[standard]
 httpx
-sentence-transformers
+fastembed
 numpy
 mcp>=2,<3
 python-multipart
