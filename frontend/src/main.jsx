@@ -74,8 +74,7 @@ function App(){
    const reader=r.body.getReader(),decoder=new TextDecoder();let buffer="",answer="";
    while(true){const {value,done}=await reader.read();if(done)break;buffer+=decoder.decode(value,{stream:true});const events=buffer.split("\n\n");buffer=events.pop()||"";for(const event of events){
      const type=event.split("\n").find(x=>x.startsWith("event:"))?.slice(6).trim()||"delta";
-     const line=event.split("
-").find(x=>x.startsWith("data: "));
+     const line=event.split("\n").find(x=>x.startsWith("data: "));
      if(!line)continue;
      try{
        const p=JSON.parse(line.slice(6));
