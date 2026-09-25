@@ -1,6 +1,10 @@
 import {useCallback,useState} from "react";
 
-const emptyForm={name:"",transport:"streamable-http",url:"",allowed_tools:""};
+export const emptyForm={name:"",transport:"streamable-http",url:"",allowed_tools:""};
+
+async function responseDetail(response,fallback){
+ try{const data=await response.json();return data.detail||fallback}catch{return fallback}
+}
 
 export default function useMCP({API,token,notify}){
  const [connectors,setConnectors]=useState([]);
@@ -9,9 +13,12 @@ export default function useMCP({API,token,notify}){
 
  const loadConnectors=useCallback(async()=>{
   if(!token)return;
-  const r=await fetch(API+"/api/v1/mcp/connectors",{headers:{Authorization:"Bearer "+token}});
-  if(r.ok)setConnectors((await r.json()).connectors||[]);
- },[API,token]);
+  try{
+   const r=await fetch(API+"/api/v1/mcp/connectors",{headers:{Authorization:"Bearer "+token}});
+   if(!r.ok){notify("Could not load connectors");return}
+   setConnectors((await r.json()).connectors||[]);
+  }catch{notify("Could not load connectors")}
+ },[API,token,notify]);
 
  async function addConnector(){
   if(connectorLoading)return;
@@ -27,16 +34,19 @@ export default function useMCP({API,token,notify}){
      allowed_tools:connectorForm.allowed_tools.split(",").map(x=>x.trim()).filter(Boolean)
     })
    });
-   const d=await r.json();
+   const d=await r.json().catch(()=>({}));
    if(!r.ok){notify(d.detail||"Connector add failed");return}
    setConnectors(cs=>[...cs.filter(x=>x.id!==d.connector.id),d.connector]);
    setConnectorForm(emptyForm);
-  }finally{setConnectorLoading(false)}
+  }catch{notify("Connector add failed")}
+  finally{setConnectorLoading(false)}
  }
 
  async function deleteConnectorById(id){
-  const r=await fetch(API+"/api/v1/mcp/connectors/"+id,{method:"DELETE",headers:{Authorization:"Bearer "+token}});
-  if(r.ok)setConnectors(cs=>cs.filter(x=>x.id!==id));else notify("Connector delete failed");
+  try{
+   const r=await fetch(API+"/api/v1/mcp/connectors/"+encodeURIComponent(id),{method:"DELETE",headers:{Authorization:"Bearer "+token}});
+   if(r.ok)setConnectors(cs=>cs.filter(x=>x.id!==id));else notify(await responseDetail(r,"Connector delete failed"));
+  }catch{notify("Connector delete failed")}
  }
 
  return {connectors,connectorForm,setConnectorForm,connectorLoading,loadConnectors,addConnector,deleteConnectorById};
