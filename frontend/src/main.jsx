@@ -32,6 +32,23 @@ function App(){
 
  async function logout(){try{if(token)await fetch(API+"/api/v1/auth/logout",{method:"POST",headers:{Authorization:"Bearer "+token}})}catch(e){}localStorage.removeItem("personal_ai_token");setUser(null);setChats(initial);setActive("new");}
  async function authSubmit(){const path=authMode==="login"?"/api/v1/auth/login":"/api/v1/auth/register";const body=authMode==="login"?{email:auth.email,password:auth.password}:auth;const r=await fetch(API+path,{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify(body)});const d=await r.json();if(!r.ok){notify(d.detail||"Authentication failed");return}localStorage.setItem("personal_ai_token",d.token);setUser(d.user);}
+ function copyMessage(content,index){try{navigator.clipboard.writeText(content);setCopiedMessage(index);setTimeout(()=>setCopiedMessage(null),1500)}catch(e){}}
+ async function renameChat(id,currentTitle){setRenameState({id,value:currentTitle});}
+ async function submitRename(){
+  const {id,value}=renameState||{};const title=value?.trim();
+  if(!id||!title){notify("Chat name cannot be empty");return}
+  if(title===chats.find(c=>c.id===id)?.title){setRenameState(null);return}
+  const r=await fetch(API+"/api/v1/chats/"+encodeURIComponent(id),{method:"PATCH",headers:{"Content-Type":"application/json",Authorization:"Bearer "+token},body:JSON.stringify({title})});
+  if(r.ok){setChats(cs=>cs.map(c=>c.id===id?{...c,title}:c));setRenameState(null)}else notify("Rename failed");
+ }
+ function deleteChatById(id){setConfirmState({type:"chat",id,message:"Delete this conversation?"});}
+ async function confirmDeleteChat(id){
+  const r=await fetch(API+"/api/v1/chats/"+encodeURIComponent(id),{method:"DELETE",headers:{Authorization:"Bearer "+token}});
+  if(!r.ok){notify("Delete failed");return}
+  const remaining=chats.filter(c=>c.id!==id);
+  setChats(remaining.length?remaining:[{id:"new",title:"New conversation",messages:[]}]);
+  if(active===id)setActive(remaining[0]?.id||"new");
+ }
  async function uploadFile(file){setUploading(true);try{const fd=new FormData();fd.append("file",file);const r=await fetch(API+"/api/v1/files/upload",{method:"POST",headers:{Authorization:"Bearer "+token},body:fd});const d=await r.json();if(!r.ok){notify(d.detail||"Upload failed");return}setAttachments(a=>[...a,{path:d.path,name:d.name}]);await loadFiles();notify("File attached","success")}catch(e){notify("Upload failed")}finally{setUploading(false)}}
  async function deleteFile(path){setConfirmState({type:"file",path,message:"Delete this file? This also removes its indexed content."});}
  async function confirmDeleteFile(path){const r=await fetch(API+"/api/v1/files/"+path.split("/").map(encodeURIComponent).join("/"),{method:"DELETE",headers:{Authorization:"Bearer "+token}});if(r.ok)await loadFiles();else notify("Delete failed");}
