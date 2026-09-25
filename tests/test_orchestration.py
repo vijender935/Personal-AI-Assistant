@@ -39,3 +39,17 @@ def test_plan_prompt_is_actionable():
     prompt = plan_prompt(plan)
     assert "Task plan:" in prompt
     assert "web_search" in prompt
+
+
+
+def test_execution_plan_orders_routes():
+    from orchestration import build_execution_plan
+
+    plan = plan_task("Search my memory and today's GitHub issue")
+    execution = build_execution_plan(plan)
+    assert execution.steps[0] == "understand_request"
+    assert "retrieve_memory" in execution.steps
+    assert "web_or_current_information" in execution.steps
+    assert "mcp_tool_execution" in execution.steps
+    assert execution.steps[-2:] == ("validate_tool_results", "compose_answer")
+    assert execution.max_tool_rounds == 4
