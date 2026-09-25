@@ -2,6 +2,7 @@ from fastapi.testclient import TestClient
 import uuid
 
 import api
+from tools import save_turn
 
 
 client = TestClient(api.app)
@@ -74,7 +75,7 @@ def test_chat_rename_delete_and_list(monkeypatch):
     headers = _register_user()
     user = api.get_user(headers["Authorization"].split(" ", 1)[1])
     assert user
-    api.save_turn(f"user-{user['id']}-chat-1", "hello", "world", user_id=user["id"])
+    save_turn(f"user-{user['id']}-chat-1", "hello", "world", user_id=user["id"])
 
     response = client.patch(
         "/api/v1/chats/chat-1",
