@@ -167,3 +167,25 @@ def delete_chat(session_id, user_id=0):
     with sqlite3.connect(DB_PATH) as con:
         con.execute("DELETE FROM messages WHERE user_id=? AND session_id=?",(user_id,session_id))
         con.execute("DELETE FROM chat_metadata WHERE user_id=? AND session_id=?",(user_id,session_id))
+
+def remove_last_assistant(session_id, user_id=0):
+    with sqlite3.connect(DB_PATH) as con:
+        row=con.execute(
+            "SELECT id FROM messages WHERE user_id=? AND session_id=? AND role='assistant' ORDER BY id DESC LIMIT 1",
+            (user_id,session_id),
+        ).fetchone()
+        if not row:
+            return False
+        con.execute("DELETE FROM messages WHERE id=?", (row[0],))
+        return True
+
+def remove_last_turn(session_id, user_id=0):
+    with sqlite3.connect(DB_PATH) as con:
+        rows=con.execute(
+            "SELECT id FROM messages WHERE user_id=? AND session_id=? ORDER BY id DESC LIMIT 2",
+            (user_id,session_id),
+        ).fetchall()
+        if len(rows) < 2:
+            return False
+        con.executemany("DELETE FROM messages WHERE id=?", [(row[0],) for row in rows])
+        return True
