@@ -5,7 +5,7 @@ import os
 import time
 from typing import Optional
 
-from fastapi import Depends, FastAPI, File, Header, HTTPException, UploadFile\nfrom fastapi.responses import StreamingResponse
+from fastapi import Depends, FastAPI, File, Header, HTTPException, UploadFile\nfrom fastapi.responses import FileResponse, StreamingResponse
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel, Field
 
@@ -299,3 +299,86 @@ def create_rag_file(path: str, user=Depends(current_user)):
     except Exception as exc:
         raise HTTPException(status_code=500, detail=str(exc)) from exc
     return {"path": path, "chunks_added": added}
+MAX_UPLOAD_BYTES = 10 * 1024 * 1024
+
+def _file_metadata(path, user_id):
+    candidate = _safe_path(path, user_id)
+    if not candidate.is_file():
+        raise FileNotFoundError(path)
+    stat = candidate.stat()
+    import mimetypes
+    mime, _ = mimetypes.guess_type(candidate.name)
+    return {
+        "path": str(candidate.relative_to((FILE_ROOT / f"user-{user_id}").resolve())) if False else path,
+        "name": candidate.name,
+        "size": stat.st_size,
+        "mime_type": mime or "application/octet-stream",
+        "extension": candidate.suffix.lower(),
+        "modified_at": stat.st_mtime,
+    }
+
+@app.post("/api/v1/files/upload")
+async def upload_file(file: UploadFile = File(...), user=Depends(current_user)):
+    if not file.filename:
+        raise HTTPException(status_code=400, detail="Filename is required.")
+    content = await file.read(MAX_UPLOAD_BYTES + 1)
+    if len(content) > MAX_UPLOAD_BYTES:
+        raise HTTPException(status_code=413, detail="File exceeds the 10 MB upload limit.")
+    try:
+        path = save_upload(file.filename, content, user_id=user["id"])
+        indexed_chunks = 0
+        candidate = _safe_path(path, user["id"])
+        if is_supported_document(candidate):
+            document_text = extract_and_limit(candidate)
+            user_root = (FILE_ROOT / f"user_{user['id']}").resolve()
+            source = str(candidate.relative_to(user_root))
+            indexed_chunks = index_document(source, document_text, user_id=user["id"], replace_source=True)
+        return {"path": path, "name": candidate.name, "size": len(content), "indexed_chunks": indexed_chunks}
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+
+@app.get("/api/v1/files")
+def list_files(user=Depends(current_user)):
+    root = (FILE_ROOT / f"user_{user['id']}").resolve()
+    root.mkdir(parents=True, exist_ok=True)
+    files = []
+    import mimetypes
+    for candidate in sorted(root.rglob("*")):
+        if not candidate.is_file():
+            continue
+        relative = str(candidate.relative_to(root))
+        stat = candidate.stat()
+        mime, _ = mimetypes.guess_type(candidate.name)
+        files.append({
+            "path": relative,
+            "name": candidate.name,
+            "size": stat.st_size,
+            "mime_type": mime or "application/octet-stream",
+            "extension": candidate.suffix.lower(),
+            "modified_at": stat.st_mtime,
+        })
+    return {"files": files}
+
+@app.get("/api/v1/files/{path:path}")
+def get_file(path: str, user=Depends(current_user)):
+    try:
+        candidate = _safe_path(path, user["id"])
+        if not candidate.is_file():
+            raise FileNotFoundError(path)
+    except (FileNotFoundError, PermissionError) as exc:
+        raise HTTPException(status_code=404, detail="File not found.") from exc
+    import mimetypes
+    mime, _ = mimetypes.guess_type(candidate.name)
+    return FileResponse(candidate, media_type=mime or "application/octet-stream", filename=candidate.name)
+
+@app.delete("/api/v1/files/{path:path}")
+def delete_file(path: str, user=Depends(current_user)):
+    try:
+        candidate = _safe_path(path, user["id"])
+        if not candidate.is_file():
+            raise FileNotFoundError(path)
+        candidate.unlink()
+        return {"deleted": True, "path": path}
+    except (FileNotFoundError, PermissionError) as exc:
+        raise HTTPException(status_code=404, detail="File not found.") from exc
+
