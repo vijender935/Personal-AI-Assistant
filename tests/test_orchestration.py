@@ -107,3 +107,8 @@ def test_select_mcp_tools_is_bounded():
         for i in range(20)
     ]
     assert len(select_mcp_tools(schemas, "do something", max_tools=5)) == 5
+
+def test_simple_conversation_gets_no_tool_schemas():
+    from agent import _tool_schemas_for
+
+    assert _tool_schemas_for(0, "Hi") == []
