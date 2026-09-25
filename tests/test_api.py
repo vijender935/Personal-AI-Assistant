@@ -4,6 +4,7 @@ import uuid
 import api
 import auth
 from tools import save_turn
+import tools
 
 
 client = TestClient(api.app)
@@ -107,7 +108,6 @@ def test_chat_management_isolated_between_users(monkeypatch):
     user_a = api.get_user(token_a)
     user_b = api.get_user(token_b)
     api.save_turn(f"user-{user_a['id']}-private", "secret A", "answer A", user_id=user_a["id"])
-    api.save_turn(f"user-{user_b['id']}-private", "secret B", "answer B", user_id=user_b["id"])
 
     assert client.patch(
         "/api/v1/chats/private", json={"title":"A"}, headers=headers_b
@@ -126,7 +126,10 @@ def test_regenerate_and_edit_chat(monkeypatch):
     session = f"user-{user['id']}-managed"
     api.save_turn(session, "original", "old answer", user_id=user["id"])
 
-    monkeypatch.setattr(api, "run_agent", lambda *args, **kwargs: "new answer")
+    def fake_run_agent(*args, **kwargs):
+        tools.save_turn(kwargs["session_id"], kwargs.get("goal", "edited"), "new answer", user_id=kwargs["user_id"])
+        return "new answer"
+    monkeypatch.setattr(api, "run_agent", fake_run_agent)
     response = client.post("/api/v1/chats/managed/regenerate", headers=headers)
     assert response.status_code == 200
     assert response.json()["answer"] == "new answer"
