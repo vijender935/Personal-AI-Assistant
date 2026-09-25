@@ -200,7 +200,8 @@ def chat_stream(request: ChatRequest, user=Depends(current_user)):
     internal_session=f"user-{user['id']}-{request.session_id}"
 
     def event_stream():
-        yield "event: start\\ndata: {\\\"session_id\\\": \\""+request.session_id+"\\\"}\\n\\n"
+        import json
+        yield "event: start\\ndata: " + json.dumps({"session_id": request.session_id}) + "\\n\\n"
         for chunk in stream_agent(
             request.message,
             session_id=internal_session,
@@ -208,8 +209,7 @@ def chat_stream(request: ChatRequest, user=Depends(current_user)):
             image_urls=attachment_urls,
             rag_sources=rag_sources or None,
         ):
-            payload=chunk.replace("\\", "\\\\").replace("\n", "\\n").replace('"', '\\\"')
-            yield f"data: {{\\\"text\\\":\\\"{payload}\\\"}}\\n\\n"
+            yield "data: " + json.dumps({"text": chunk}, ensure_ascii=False) + "\\n\\n"
         yield "event: done\\ndata: {}\\n\\n"
 
     return StreamingResponse(
