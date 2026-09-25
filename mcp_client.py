@@ -1,8 +1,4 @@
-"""Securely configured MCP client bridge for the agent.
-
-Only servers explicitly listed in MCP_SERVERS are contacted. External MCP
-execution is opt-in and never enabled by an unconfigured environment.
-"""
+"""Secure MCP client bridge for configured and per-user connectors."""
 from __future__ import annotations
 
 import asyncio
@@ -24,8 +20,14 @@ def _timeout_seconds() -> float:
     return max(1.0, min(value, 120.0))
 
 
-def _registry_key() -> str:
-    return os.getenv("MCP_SERVERS", "").strip()
+def _registry_key(user_id: int = 0) -> str:
+    try:
+        from connectors import list_connectors
+        personal = list_connectors(user_id)
+        personal_key = repr([(x["id"], x["name"], x["transport"], x["url"], x["allowed_tools"], x["enabled"]) for x in personal])
+    except Exception:
+        personal_key = ""
+    return f"{user_id}|{os.getenv('MCP_SERVERS', '').strip()}|{personal_key}"
 
 
 def _server_target(config):
@@ -46,9 +48,9 @@ def _server_target(config):
     raise ValueError(f"Unsupported MCP transport: {config.transport}")
 
 
-async def _discover_async() -> list[dict[str, Any]]:
+async def _discover_async(user_id: int = 0) -> list[dict[str, Any]]:
     discovered = []
-    for config in load_server_configs():
+    for config in load_server_configs(user_id):
         try:
             target = _server_target(config)
             async with Client(target, read_timeout_seconds=_timeout_seconds()) as client:
@@ -70,8 +72,8 @@ async def _discover_async() -> list[dict[str, Any]]:
     return discovered
 
 
-def discover_tool_schemas() -> list[dict[str, Any]]:
-    key = _registry_key()
+def discover_tool_schemas(user_id: int = 0) -> list[dict[str, Any]]:
+    key = _registry_key(user_id)
     now = time.monotonic()
     try:
         ttl = float(os.getenv("MCP_DISCOVERY_TTL_SECONDS", "60"))
@@ -80,13 +82,13 @@ def discover_tool_schemas() -> list[dict[str, Any]]:
     ttl = max(1.0, min(ttl, 600.0))
     if _DISCOVERY_CACHE["key"] == key and now < _DISCOVERY_CACHE["expires_at"]:
         return list(_DISCOVERY_CACHE["schemas"])
-    schemas = asyncio.run(asyncio.wait_for(_discover_async(), timeout=_timeout_seconds()))
+    schemas = asyncio.run(asyncio.wait_for(_discover_async(user_id), timeout=_timeout_seconds()))
     _DISCOVERY_CACHE.update(key=key, expires_at=now + ttl, schemas=schemas)
     return list(schemas)
 
 
-async def _call_async(server_name: str, tool_name: str, arguments: dict[str, Any]) -> Any:
-    config = next((item for item in load_server_configs() if item.name == server_name), None)
+async def _call_async(server_name: str, tool_name: str, arguments: dict[str, Any], user_id: int = 0) -> Any:
+    config = next((item for item in load_server_configs(user_id) if item.name == server_name), None)
     if config is None:
         raise ValueError(f"MCP server {server_name!r} is not configured.")
     if not tool_allowed(config, tool_name):
@@ -97,23 +99,17 @@ async def _call_async(server_name: str, tool_name: str, arguments: dict[str, Any
 
 
 def _content_to_text(result: Any) -> str:
-    if getattr(result, "isError", False):
-        prefix = "MCP tool error"
-    else:
-        prefix = "MCP tool result"
+    prefix = "MCP tool error" if getattr(result, "isError", False) else "MCP tool result"
     parts = []
     for item in getattr(result, "content", []) or []:
         text = getattr(item, "text", None)
-        if text is not None:
-            parts.append(text)
-        else:
-            parts.append(str(item))
+        parts.append(text if text is not None else str(item))
     if getattr(result, "structuredContent", None):
         parts.append(str(result.structuredContent))
     return prefix + ": " + ("\n".join(parts) if parts else "(empty)")
 
 
-def call_tool(name: str, arguments: dict[str, Any]) -> str:
+def call_tool(name: str, arguments: dict[str, Any], user_id: int = 0) -> str:
     if not name.startswith("mcp__"):
         raise ValueError("Not an MCP tool.")
     parts = name.split("__", 2)
@@ -121,7 +117,7 @@ def call_tool(name: str, arguments: dict[str, Any]) -> str:
         raise ValueError("Invalid MCP tool name.")
     server_name, tool_name = parts[1], parts[2]
     result = asyncio.run(asyncio.wait_for(
-        _call_async(server_name, tool_name, arguments),
+        _call_async(server_name, tool_name, arguments, user_id),
         timeout=_timeout_seconds(),
     ))
     return _content_to_text(result)
