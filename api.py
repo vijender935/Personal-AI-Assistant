@@ -5,7 +5,7 @@ import os
 import time
 from typing import Optional
 
-from fastapi import FastAPI, HTTPException
+from fastapi import Depends, FastAPI, Header, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel, Field
 
@@ -13,9 +13,11 @@ from agent import MODEL, run_agent
 from config import ALLOW_SHELL, ensure_directories
 from tools import init_db, recall_memories, remember_fact
 from memory import index_document, index_file, search_rag
+from auth import authenticate, create_session, create_user, get_user, init_auth_db, revoke_session
 
 ensure_directories()
 init_db()
+init_auth_db()
 
 app = FastAPI(
     title="Personal AI Assistant API",
@@ -58,6 +60,55 @@ class MemoryResponse(BaseModel):
     fact: str
 
 
+class RegisterRequest(BaseModel):
+    name: str = Field(..., min_length=1, max_length=100)
+    email: str = Field(..., min_length=5, max_length=254)
+    password: str = Field(..., min_length=8, max_length=200)
+
+
+class LoginRequest(BaseModel):
+    email: str = Field(..., min_length=5, max_length=254)
+    password: str = Field(..., min_length=1, max_length=200)
+
+
+def current_user(authorization: str | None = Header(default=None)):
+    if not authorization or not authorization.lower().startswith("bearer "):
+        raise HTTPException(status_code=401, detail="Authentication required.")
+    user = get_user(authorization.split(" ", 1)[1].strip())
+    if not user:
+        raise HTTPException(status_code=401, detail="Invalid or expired session.")
+    return user
+
+
+@app.post("/api/v1/auth/register")
+def register(request: RegisterRequest):
+    try:
+        user = create_user(request.name, request.email, request.password)
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+    return {"user": user, "token": create_session(user["id"])}
+
+
+@app.post("/api/v1/auth/login")
+def login(request: LoginRequest):
+    user = authenticate(request.email, request.password)
+    if not user:
+        raise HTTPException(status_code=401, detail="Invalid email or password.")
+    return {"user": user, "token": create_session(user["id"])}
+
+
+@app.post("/api/v1/auth/logout")
+def logout(authorization: str | None = Header(default=None)):
+    if authorization and authorization.lower().startswith("bearer "):
+        revoke_session(authorization.split(" ", 1)[1].strip())
+    return {"logged_out": True}
+
+
+@app.get("/api/v1/auth/me")
+def me(user=Depends(current_user)):
+    return {"user": user}
+
+
 @app.get("/health")
 def health():
     return {
@@ -79,7 +130,7 @@ def info():
 
 
 @app.post("/api/v1/chat", response_model=ChatResponse)
-def chat(request: ChatRequest):
+def chat(request: ChatRequest, user=Depends(current_user)):
     if not os.getenv("GROQ_API_KEY"):
         raise HTTPException(status_code=503, detail="GROQ_API_KEY is not configured.")
 
@@ -103,7 +154,7 @@ def chat(request: ChatRequest):
 
 
 @app.post("/api/v1/memories", response_model=MemoryResponse)
-def create_memory(request: MemoryRequest):
+def create_memory(request: MemoryRequest, user=Depends(current_user)):
     remember_fact(request.fact, source=request.source)
     return MemoryResponse(saved=True, fact=request.fact)
 
