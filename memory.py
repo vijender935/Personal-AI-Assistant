@@ -69,7 +69,7 @@ def index_document(source,content,user_id=0,replace_source=False):
             con.execute("INSERT INTO rag_documents(source,chunk_index,content,content_hash,user_id,embedding) VALUES(?,?,?,?,?,?)",(source,index,chunk,digest,user_id,_embedding(chunk)))
         added+=1
     return added
-def index_file(path,user_id=0,replace_source=False)
+def index_file(path,user_id=0,replace_source=False):
     candidate=(FILE_ROOT/path).resolve()
     try:candidate.relative_to(FILE_ROOT.resolve())
     except ValueError as exc:raise PermissionError(f"path is outside the allowed file root: {FILE_ROOT}") from exc
