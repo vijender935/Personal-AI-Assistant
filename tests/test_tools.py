@@ -42,3 +42,23 @@ def test_chat_metadata_and_regeneration_helpers(tmp_path, monkeypatch):
     assert tools.load_history("s1", user_id=7) == [{"role": "user", "content": "hello"}]
     tools.delete_chat("s1", user_id=7)
     assert tools.load_history("s1", user_id=7) == []
+
+
+
+def test_file_tools_are_isolated_between_users(tmp_path, monkeypatch):
+    root = tmp_path / "files"
+    root.mkdir()
+    monkeypatch.setattr(tools, "FILE_ROOT", root)
+
+    assert "Written" in tools.write_file("private.txt", "user7", user_id=7)
+    assert tools.read_file("private.txt", user_id=7) == "user7"
+    assert "file not found" in tools.read_file("private.txt", user_id=8).lower()
+    assert tools.read_file("../user_7/private.txt", user_id=8).startswith("Error:")
+
+
+def test_shell_runs_inside_user_root(tmp_path, monkeypatch):
+    monkeypatch.setattr(tools, "ALLOW_SHELL", True)
+    monkeypatch.setattr(tools, "FILE_ROOT", tmp_path)
+    monkeypatch.setattr(tools, "ALLOWED_SHELL_COMMANDS", {"pwd"})
+    result = tools.run_shell("pwd", user_id=9)
+    assert "user_9" in result
