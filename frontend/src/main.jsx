@@ -7,13 +7,14 @@ import FileUpload from "./components/FileUpload";
 import Modal from "./components/Modal";
 import useChat from "./hooks/useChat";
 import useFiles from "./hooks/useFiles";
+import useMemory from "./hooks/useMemory";
 import "./styles.css";
 
 const API=import.meta.env.VITE_API_URL || "http://127.0.0.1:8000";
 const initial=[{id:"new",title:"New conversation",messages:[]}];
 
 function App(){
- const [chats,setChats]=useState(initial),[active,setActive]=useState("new"),[text,setText]=useState(""),[loading,setLoading]=useState(false),[sidebar,setSidebar]=useState(true),[settings,setSettings]=useState(false),[filesOpen,setFilesOpen]=useState(false),[fileQuery,setFileQuery]=useState(""),[user,setUser]=useState(null),[auth,setAuth]=useState({email:"",password:"",name:""}),[authMode,setAuthMode]=useState("login"),[attachments,setAttachments]=useState([]),[chatQuery,setChatQuery]=useState(""),[copiedMessage,setCopiedMessage]=useState(null),[connectors,setConnectors]=useState([]),[connectorForm,setConnectorForm]=useState({name:"",transport:"streamable-http",url:"",allowed_tools:""}),[connectorLoading,setConnectorLoading]=useState(false),[memories,setMemories]=useState([]),[memoryForm,setMemoryForm]=useState(""),[memoryOpen,setMemoryOpen]=useState(false),[toast,setToast]=useState(null),[confirmState,setConfirmState]=useState(null),[editState,setEditState]=useState(null),[renameState,setRenameState]=useState(null);
+ const [chats,setChats]=useState(initial),[active,setActive]=useState("new"),[text,setText]=useState(""),[loading,setLoading]=useState(false),[sidebar,setSidebar]=useState(true),[settings,setSettings]=useState(false),[filesOpen,setFilesOpen]=useState(false),[fileQuery,setFileQuery]=useState(""),[user,setUser]=useState(null),[auth,setAuth]=useState({email:"",password:"",name:""}),[authMode,setAuthMode]=useState("login"),[attachments,setAttachments]=useState([]),[chatQuery,setChatQuery]=useState(""),[copiedMessage,setCopiedMessage]=useState(null),[connectors,setConnectors]=useState([]),[connectorForm,setConnectorForm]=useState({name:"",transport:"streamable-http",url:"",allowed_tools:""}),[connectorLoading,setConnectorLoading]=useState(false),[memoryOpen,setMemoryOpen]=useState(false),[toast,setToast]=useState(null),[confirmState,setConfirmState]=useState(null),[editState,setEditState]=useState(null),[renameState,setRenameState]=useState(null);
  const token=localStorage.getItem("personal_ai_token");
  function notify(message,type="error"){setToast({message,type});window.clearTimeout(notify.timer);notify.timer=window.setTimeout(()=>setToast(null),3200)}
 
@@ -21,15 +22,14 @@ function App(){
  useEffect(()=>{if(!token||!user)return;fetch(API+"/api/v1/chats",{headers:{Authorization:"Bearer "+token}}).then(async r=>{if(!r.ok)return;const d=await r.json();if(d.chats?.length){const normalized=d.chats.map(c=>({...c,id:c.session_id}));setChats(normalized);setActive(normalized[0].id)}}).catch(()=>{});},[token,user]);
  useEffect(()=>{if(!token||!user||!active||active==="new")return;let cancelled=false;fetch(API+"/api/v1/chats/"+encodeURIComponent(active),{headers:{Authorization:"Bearer "+token}}).then(async r=>{if(!r.ok)return;const d=await r.json();if(cancelled)return;setChats(cs=>cs.map(c=>c.id===active?{...c,messages:d.messages||[]}:c));}).catch(()=>{});return()=>{cancelled=true}},[active,token,user]);
 
- async function loadMemories(){if(!token)return;const r=await fetch(API+"/api/v1/memories",{headers:{Authorization:"Bearer "+token}});if(r.ok)setMemories((await r.json()).memories||[]);}
- async function saveMemory(){const fact=memoryForm.trim();if(!fact)return;const r=await fetch(API+"/api/v1/memories",{method:"POST",headers:{"Content-Type":"application/json",Authorization:"Bearer "+token},body:JSON.stringify({fact,source:"settings"})});if(!r.ok){const d=await r.json();notify(d.detail||"Memory save failed");return}setMemoryForm("");await loadMemories();}
- async function deleteMemory(fact){const r=await fetch(API+"/api/v1/memories?fact="+encodeURIComponent(fact),{method:"DELETE",headers:{Authorization:"Bearer "+token}});if(r.ok)setMemories(ms=>ms.filter(x=>x!==fact));else notify("Memory delete failed");}
  async function loadConnectors(){if(!token)return;const r=await fetch(API+"/api/v1/mcp/connectors",{headers:{Authorization:"Bearer "+token}});if(r.ok)setConnectors((await r.json()).connectors||[]);}
  async function addConnector(){if(connectorLoading)return;setConnectorLoading(true);try{const r=await fetch(API+"/api/v1/mcp/connectors",{method:"POST",headers:{"Content-Type":"application/json",Authorization:"Bearer "+token},body:JSON.stringify({name:connectorForm.name.trim(),transport:connectorForm.transport,url:connectorForm.url.trim(),allowed_tools:connectorForm.allowed_tools.split(",").map(x=>x.trim()).filter(Boolean)})});const d=await r.json();if(!r.ok){notify(d.detail||"Connector add failed");return}setConnectors(cs=>[...cs.filter(x=>x.id!==d.connector.id),d.connector]);setConnectorForm({name:"",transport:"streamable-http",url:"",allowed_tools:""});}finally{setConnectorLoading(false)}}
  async function deleteConnectorById(id){const r=await fetch(API+"/api/v1/mcp/connectors/"+id,{method:"DELETE",headers:{Authorization:"Bearer "+token}});if(r.ok)setConnectors(cs=>cs.filter(x=>x.id!==id));else notify("Connector delete failed");}
  useEffect(()=>{if(user){loadFiles();loadConnectors();loadMemories()}},[user]);
  const {chat,regenerate,editLastUser,send,stopStream,newChat}=useChat({API,token,chats,setChats,active,setActive,text,setText,attachments,setAttachments,loading,setLoading,notify});
  const {files,uploading,loadFiles,uploadFile,deleteFile,confirmDeleteFile,downloadFile}=useFiles({API,token,notify,setAttachments});
+ const {memories,memoryForm,setMemoryForm,loadMemories,saveMemory,deleteMemory}=useMemory({API,token,notify});
+
 
 
  async function logout(){try{if(token)await fetch(API+"/api/v1/auth/logout",{method:"POST",headers:{Authorization:"Bearer "+token}})}catch(e){}localStorage.removeItem("personal_ai_token");setUser(null);setChats(initial);setActive("new");}
