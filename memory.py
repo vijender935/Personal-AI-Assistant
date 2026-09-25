@@ -3,6 +3,7 @@ from __future__ import annotations
 import hashlib,sqlite3
 from typing import Iterable
 from config import DB_PATH,FILE_ROOT,ensure_directories
+from multimodal import _safe_path
 MODEL_NAME="sentence-transformers/all-MiniLM-L6-v2";MAX_CHUNK_CHARS=1800;CHUNK_OVERLAP=250
 _model=None
 def _get_model():
@@ -70,11 +71,11 @@ def index_document(source,content,user_id=0,replace_source=False):
         added+=1
     return added
 def index_file(path,user_id=0,replace_source=False):
-    candidate=(FILE_ROOT/path).resolve()
-    try:candidate.relative_to(FILE_ROOT.resolve())
-    except ValueError as exc:raise PermissionError(f"path is outside the allowed file root: {FILE_ROOT}") from exc
+    candidate=_safe_path(path,user_id)
     if not candidate.is_file():raise FileNotFoundError(path)
-    return index_document(str(candidate.relative_to(FILE_ROOT)),candidate.read_text(encoding="utf-8",errors="replace"),user_id=user_id)
+    user_root=candidate.parents[len(candidate.parts)-len(candidate.parts)] if False else (FILE_ROOT/f"user_{user_id}").resolve()
+    source=str(candidate.relative_to(user_root))
+    return index_document(source,candidate.read_text(encoding="utf-8",errors="replace"),user_id=user_id,replace_source=replace_source)
 def search_rag(query,limit=5,user_id=0,sources=None):
     query=query.strip()
     if not query:return []
