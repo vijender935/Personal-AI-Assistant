@@ -26,3 +26,19 @@ def test_shell_allowlist(tmp_path, monkeypatch):
     result = tools.run_shell("echo hello")
     assert "exit_code=0" in result
     assert "hello" in result
+
+def test_chat_metadata_and_regeneration_helpers(tmp_path, monkeypatch):
+    db = tmp_path / "assistant.db"
+    monkeypatch.setattr(tools, "DB_PATH", db)
+    tools.init_db()
+    tools.save_turn("s1", "hello", "world", user_id=7)
+    tools.set_chat_title("s1", "My chat", user_id=7)
+    assert tools.get_chat_title("s1", user_id=7) == "My chat"
+    assert tools.get_chat_title("s1", user_id=8) is None
+    assert tools.remove_last_assistant("s1", user_id=7) is True
+    assert tools.load_history("s1", user_id=7)[-1]["role"] == "user"
+    tools.save_turn("s1", "hello", "again", user_id=7)
+    assert tools.remove_last_turn("s1", user_id=7) is True
+    assert tools.load_history("s1", user_id=7) == [{"role": "user", "content": "hello"}]
+    tools.delete_chat("s1", user_id=7)
+    assert tools.load_history("s1", user_id=7) == []
