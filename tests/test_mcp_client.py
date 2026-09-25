@@ -34,3 +34,33 @@ def test_mcp_discovery_cache(monkeypatch):
     monkeypatch.setenv("MCP_SERVERS", '{"demo":{"transport":"streamable-http","url":"https://example/mcp"}}')
     monkeypatch.setattr(mcp_client, "_discover_async", lambda: (_ for _ in ()).throw(AssertionError("cache miss")))
     assert mcp_client.discover_tool_schemas()[0]["function"]["name"] == "mcp__demo__ping"
+
+
+
+def test_mcp_server_and_tool_permissions(monkeypatch):
+    from mcp_registry import load_server_configs, tool_allowed
+
+    monkeypatch.setenv(
+        "MCP_SERVERS",
+        '{"github":{"transport":"streamable-http","url":"https://example/mcp","allowed_tools":["list_issues"]},'
+        '"slack":{"transport":"streamable-http","url":"https://example/slack"}}',
+    )
+    monkeypatch.setenv("MCP_ALLOWED_SERVERS", "github")
+    configs = load_server_configs()
+    assert [item.name for item in configs] == ["github"]
+    assert tool_allowed(configs[0], "list_issues")
+    assert not tool_allowed(configs[0], "delete_repository")
+
+
+def test_mcp_execution_rejects_disallowed_tool(monkeypatch):
+    monkeypatch.setenv(
+        "MCP_SERVERS",
+        '{"github":{"transport":"streamable-http","url":"https://example/mcp","allowed_tools":["list_issues"]}}',
+    )
+    from mcp_registry import load_server_configs
+    config = load_server_configs()[0]
+    assert config.name == "github"
+    import pytest
+    with pytest.raises(PermissionError):
+        import asyncio
+        asyncio.run(mcp_client._call_async("github", "delete_repository", {}))
