@@ -56,13 +56,42 @@ def build_messages(goal, session_id, user_id=0, rag_sources=None):
     return messages
 
 def _tool_schemas_for(user_id, goal):
-    mcp_schemas = []
-    try:
-        from mcp_client import discover_tool_schemas
-        mcp_schemas = select_mcp_tools(discover_tool_schemas(user_id), goal, max_tools=12)
-    except Exception as exc:
-        logger.warning("MCP discovery unavailable: %s", exc)
-    return TOOL_SCHEMAS + mcp_schemas
+    """Return only tools appropriate for the classified request.
+
+    Simple conversational messages intentionally receive no tool schemas. This
+    prevents the model from inventing tool calls for greetings/chitchat and
+    avoids entering the tool loop when no external action is needed.
+    """
+    plan = plan_task(goal)
+    if plan.complexity == "simple":
+        return []
+
+    schemas = []
+    if plan.needs_web:
+        schemas.extend(
+            schema for schema in TOOL_SCHEMAS
+            if schema.get("function", {}).get("name") == "web_search"
+        )
+    if plan.needs_local_tools:
+        local_names = {"calculator", "read_file", "write_file", "run_shell"}
+        schemas.extend(
+            schema for schema in TOOL_SCHEMAS
+            if schema.get("function", {}).get("name") in local_names
+        )
+
+    if plan.needs_mcp:
+        try:
+            from mcp_client import discover_tool_schemas
+            schemas.extend(select_mcp_tools(discover_tool_schemas(user_id), goal, max_tools=12))
+        except Exception as exc:
+            logger.warning("MCP discovery unavailable: %s", exc)
+
+    unique = {}
+    for schema in schemas:
+        name = schema.get("function", {}).get("name")
+        if name:
+            unique[name] = schema
+    return list(unique.values())
 
 def _execute_tool(name, args, user_id):
     try:
@@ -116,8 +145,7 @@ def run_agent(goal, session_id="default", user_id=0, image_urls=None, rag_source
                 response = client.chat.completions.create(
                     model=VISION_MODEL if image_urls else MODEL,
                     messages=messages,
-                    tools=tool_schemas,
-                    tool_choice="auto",
+                    **({"tools": tool_schemas, "tool_choice": "auto"} if tool_schemas else {}),
                     temperature=0.4,
                 )
                 break
