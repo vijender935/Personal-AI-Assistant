@@ -8,7 +8,7 @@ const API=import.meta.env.VITE_API_URL || "http://127.0.0.1:8000";
 const initial=[{id:1,title:"New conversation",messages:[]}];
 
 function App(){
- const [chats,setChats]=useState(initial),[active,setActive]=useState(1),[text,setText]=useState(""),[loading,setLoading]=useState(false),[sidebar,setSidebar]=useState(true),[settings,setSettings]=useState(false),[user,setUser]=useState(null),[auth,setAuth]=useState({email:"",password:"",name:""}),[authMode,setAuthMode]=useState("login");
+ const [chats,setChats]=useState(initial),[active,setActive]=useState(1),[text,setText]=useState(""),[loading,setLoading]=useState(false),[sidebar,setSidebar]=useState(true),[settings,setSettings]=useState(false),[user,setUser]=useState(null),[auth,setAuth]=useState({email:"",password:"",name:""}),[authMode,setAuthMode]=useState("login"),[attachments,setAttachments]=useState([]);
  const chat=chats.find(c=>c.id===active)||chats[0];
  const token=localStorage.getItem("personal_ai_token");
  useEffect(()=>{if(!token)return;fetch(API+"/api/v1/auth/me",{headers:{Authorization:"Bearer "+token}}).then(async r=>{if(r.ok){const d=await r.json();setUser(d.user)}else{localStorage.removeItem("personal_ai_token");setUser(null)}}).catch(()=>{});},[token]);
@@ -21,7 +21,7 @@ function App(){
   const message=text.trim(); if(!message||loading)return;
   const next=[...chat.messages,{role:"user",content:message}]; update(next); setText(""); setLoading(true);
   try{
-   const r=await fetch(API+"/api/v1/chat",{method:"POST",headers:{"Content-Type":"application/json",Authorization:"Bearer "+token},body:JSON.stringify({message,session_id:"web-"+active})});
+   const r=await fetch(API+"/api/v1/chat",{method:"POST",headers:{"Content-Type":"application/json",Authorization:"Bearer "+token},body:JSON.stringify({message,session_id:"web-"+active,attachment_paths:attachments.map(a=>a.path)})});
    const data=await r.json(); update([...next,{role:"assistant",content:r.ok?data.answer:(data.detail||"Request failed.")}]);
   }catch(e){update([...next,{role:"assistant",content:"Backend se connection nahi ho paaya. FastAPI server check karo."}]);}
   finally{setLoading(false);}
@@ -42,7 +42,7 @@ function App(){
      chat.messages.map((m,i)=><div className={m.role==="user"?"bubble user":"bubble assistant"} key={i}><div className="role">{m.role==="user"?"You":"Personal AI"}</div><div>{m.content}</div></div>)}
     {loading&&<div className="bubble assistant"><div className="role">Personal AI</div><div className="typing"><i/><i/><i/></div></div>}
    </section>
-   <div className="composer-wrap"><div className="composer"><FileUpload onFile={async file=>{if(!token){alert("Login required");return;}const fd=new FormData();fd.append("file",file);const r=await fetch(API+"/api/v1/files/upload",{method:"POST",headers:{Authorization:"Bearer "+token},body:fd});const d=await r.json();if(!r.ok){alert(d.detail||"Upload failed");return;}setText(t=>t+(t?"\\n":"")+`Attached: ${d.filename}`);}}/><textarea value={text} onChange={e=>setText(e.target.value)} onKeyDown={e=>{if(e.key==="Enter"&&!e.shiftKey){e.preventDefault();send()}}} placeholder="Message Personal AI..." rows="1"/><button className="send" onClick={send} disabled={!text.trim()||loading}><Send size={18}/></button></div><small>Personal AI can make mistakes. Verify important information.</small></div>
+   <div className="composer-wrap"><div className="composer"><FileUpload onFile={async file=>{if(!token){alert("Login required");return;}const fd=new FormData();fd.append("file",file);const r=await fetch(API+"/api/v1/files/upload",{method:"POST",headers:{Authorization:"Bearer "+token},body:fd});const d=await r.json();if(!r.ok){alert(d.detail||"Upload failed");return;}setText(t=>t+(t?"\\n":"")+`Attached: ${d.filename}`);}}/><div className="attachments">{attachments.map(a=><span key={a.path}>{a.name} <button onClick={()=>setAttachments(xs=>xs.filter(x=>x.path!==a.path))}>×</button></span>)}</div><textarea value={text} onChange={e=>setText(e.target.value)} onKeyDown={e=>{if(e.key==="Enter"&&!e.shiftKey){e.preventDefault();send()}}} placeholder="Message Personal AI..." rows="1"/><button className="send" onClick={send} disabled={!text.trim()||loading}><Send size={18}/></button></div><small>Personal AI can make mistakes. Verify important information.</small></div>
   </main>
   {settings&&<div className="overlay" onClick={()=>setSettings(false)}><div className="settings" onClick={e=>e.stopPropagation()}><div className="settings-head"><h2>Settings</h2><button onClick={()=>setSettings(false)}>×</button></div><label>API endpoint<input value={API} readOnly/></label><label>Appearance<select defaultValue="system"><option>System</option><option>Light</option><option>Dark</option></select></label><label>Model<input value="openai/gpt-oss-120b" readOnly/></label><label>Account<input value={user?.email||""} readOnly/></label><button className="auth-submit" onClick={logout}>Logout</button></div></div>}
  </div>
