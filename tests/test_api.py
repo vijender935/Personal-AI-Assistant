@@ -138,3 +138,20 @@ def test_regenerate_and_edit_chat(monkeypatch):
     assert response.status_code == 200
     assert response.json()["message"] == "edited"
     assert response.json()["answer"] == "new answer"
+
+
+
+def test_logout_revokes_session():
+    headers = _register_user()
+    token = headers["Authorization"].split(" ", 1)[1]
+    assert client.get("/api/v1/auth/me", headers=headers).status_code == 200
+    response = client.post("/api/v1/auth/logout", headers=headers)
+    assert response.status_code == 200
+    assert client.get("/api/v1/auth/me", headers=headers).status_code == 401
+
+
+def test_expired_session_is_rejected(monkeypatch):
+    headers = _register_user()
+    token = headers["Authorization"].split(" ", 1)[1]
+    monkeypatch.setattr(api.auth.time, "time", lambda: 10**12)
+    assert client.get("/api/v1/auth/me", headers=headers).status_code == 401
