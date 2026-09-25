@@ -94,11 +94,11 @@ def _evaluate_math(node):
     if isinstance(node,ast.UnaryOp) and type(node.op) in _UNARY:return _UNARY[type(node.op)](_evaluate_math(node.operand))
     raise ValueError("unsupported expression")
 
-def calculator(expression):
+def calculator(expression, user_id=0):
     try:return str(_evaluate_math(ast.parse(expression,mode="eval").body))
     except (SyntaxError,ValueError,TypeError,ZeroDivisionError,OverflowError) as exc:return f"Error: {exc}"
 
-def web_search(query):
+def web_search(query, user_id=0):
     try:
         from ddgs import DDGS
         results=list(DDGS().text(query,max_results=5))
