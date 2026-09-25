@@ -13,9 +13,13 @@ def _get_model():
         from fastembed import TextEmbedding
         _model=TextEmbedding(model_name=MODEL_NAME)
     return _model
-def _embedding(text):
+def _embedding(text,kind="passage"):
     import numpy as np
-    return _get_model().encode(text,normalize_embeddings=True,convert_to_numpy=True).astype(np.float32).tobytes()
+    generator=_get_model().query_embed([text]) if kind=="query" else _get_model().passage_embed([text])
+    vector=np.asarray(next(generator),dtype=np.float32)
+    norm=float(np.linalg.norm(vector))
+    if norm: vector=vector/norm
+    return vector.tobytes()
 def _vector(blob):
     import numpy as np
     return np.frombuffer(blob,dtype=np.float32)
