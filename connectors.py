@@ -11,7 +11,7 @@ from config import DB_PATH, ensure_directories
 from db import connect, using_postgres
 
 
-def _is_private_or_local(host: str) -> bool:
+def _is_private_or_local(host: str, resolve_dns: bool = True) -> bool:
     host = host.strip("[]").lower()
     if host in {"localhost", "localhost.localdomain"}:
         return True
@@ -26,6 +26,8 @@ def _is_private_or_local(host: str) -> bool:
             or ip.is_reserved
         )
     except ValueError:
+        if not resolve_dns:
+            return False
         try:
             infos = socket.getaddrinfo(host, None, type=socket.SOCK_STREAM)
         except socket.gaierror as exc:
@@ -48,7 +50,7 @@ def _is_private_or_local(host: str) -> bool:
         return False
 
 
-def validate_connector_url(url: str) -> str:
+def validate_connector_url(url: str, *, resolve_dns: bool = True) -> str:
     parsed = urlparse(url)
     if parsed.scheme not in {"https", "http"} or not parsed.hostname:
         raise ValueError("Connector URL must be a valid http(s) URL.")
@@ -56,7 +58,7 @@ def validate_connector_url(url: str) -> str:
         raise ValueError("Connector URL must not contain embedded credentials.")
     if parsed.scheme == "http" and not os.getenv("ALLOW_LOCAL_MCP", "0") == "1":
         raise ValueError("HTTP MCP connectors are disabled; use HTTPS.")
-    if _is_private_or_local(parsed.hostname) and os.getenv("ALLOW_LOCAL_MCP", "0") != "1":
+    if _is_private_or_local(parsed.hostname, resolve_dns=resolve_dns) and os.getenv("ALLOW_LOCAL_MCP", "0") != "1":
         raise ValueError("Connector host resolves to a private or local address.")
     try:
         port = parsed.port
