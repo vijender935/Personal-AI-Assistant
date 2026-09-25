@@ -1,5 +1,3 @@
-from pathlib import Path
-
 from document_parser import extract_text, is_supported_document
 
 
@@ -17,8 +15,31 @@ def test_csv_extraction(tmp_path):
     assert "10" in text
 
 
+def test_json_extraction(tmp_path):
+    path=tmp_path/"data.json"
+    path.write_text('{"name":"Vijender","score":10}',encoding="utf-8")
+    text=extract_text(path)
+    assert '"name": "Vijender"' in text
+    assert '"score": 10' in text
+
+
+def test_docx_extraction(tmp_path):
+    from docx import Document
+    path=tmp_path/"report.docx"
+    doc=Document()
+    doc.add_paragraph("FastAPI document")
+    table=doc.add_table(rows=1,cols=2)
+    table.rows[0].cells[0].text="Python"
+    table.rows[0].cells[1].text="RAG"
+    doc.save(path)
+    text=extract_text(path)
+    assert "FastAPI document" in text
+    assert "Python | RAG" in text
+
+
 def test_supported_documents():
     assert is_supported_document("report.pdf")
     assert is_supported_document("report.docx")
     assert is_supported_document("data.csv")
+    assert is_supported_document("data.json")
     assert not is_supported_document("image.png")
