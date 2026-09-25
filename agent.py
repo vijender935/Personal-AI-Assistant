@@ -30,7 +30,7 @@ def build_messages(goal,session_id,user_id=0):
         context="\n\n".join(f"[{item['source']} | score={item['score']}]\n{item['content']}" for item in rag_results)
         messages.append({"role":"system","content":"Relevant knowledge-base context:\n"+context})
     messages.extend(history);messages.append({"role":"user","content":goal});return messages
-def run_agent(goal,session_id="default",user_id=0,verbose=True):
+def run_agent(goal,session_id="default",user_id=0,image_urls=None,verbose=True):
     goal=goal.strip()
     if not goal:return "Please enter a message."
     api_key=os.getenv("GROQ_API_KEY")
@@ -43,6 +43,8 @@ def run_agent(goal,session_id="default",user_id=0,verbose=True):
             remember_semantic(explicit_memory,source="user-explicit",user_id=user_id)
         except Exception as exc:logger.warning("Semantic memory unavailable: %s",exc)
     client,messages=Groq(api_key=api_key),build_messages(goal,session_id,user_id=user_id)
+    if image_urls:
+        messages[-1]["content"]=[{"type":"text","text":goal}]+[{"type":"image_url","image_url":{"url":url}} for url in image_urls]
     for _ in range(MAX_ITERATIONS):
         response=None
         for retry in range(MAX_RETRIES+1):
