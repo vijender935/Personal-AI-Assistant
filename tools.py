@@ -52,6 +52,14 @@ def recall_memories(query: str, limit: int = 8) -> list[str]:
     scored.sort(key=lambda x: (-x[0], x[1].lower()))
     return [fact for _, fact in scored[:limit]] or facts[:limit]
 
+
+def semantic_recall_memories(query: str, limit: int = 8) -> list[str]:
+    try:
+        from memory import search_semantic_memories
+        return search_semantic_memories(query, limit=limit) or recall_memories(query, limit=limit)
+    except Exception:
+        return recall_memories(query, limit=limit)
+
 _BINARY: dict[type[ast.operator], Any] = {
     ast.Add: operator.add, ast.Sub: operator.sub, ast.Mult: operator.mul,
     ast.Div: operator.truediv, ast.FloorDiv: operator.floordiv,
