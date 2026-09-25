@@ -6,6 +6,7 @@
   "scripts": {
     "dev": "vite",
     "build": "vite build",
+    "test": "vitest run",
     "preview": "vite preview",
     "cap:add": "cap add android",
     "cap:sync": "cap sync android",
@@ -23,6 +24,7 @@
     "remark-gfm": "4.0.1"
   },
   "devDependencies": {
-    "@capacitor/cli": "8.5.2"
+    "@capacitor/cli": "8.5.2",
+    "vitest": "3.2.4"
   }
 }
