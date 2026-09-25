@@ -22,6 +22,14 @@ services:
         fromDatabase:
           name: personal-ai-assistant-db
           property: connectionString
+      - key: R2_ENDPOINT
+        sync: false
+      - key: R2_BUCKET
+        sync: false
+      - key: R2_ACCESS_KEY_ID
+        sync: false
+      - key: R2_SECRET_ACCESS_KEY
+        sync: false
 
   - type: web
     name: personal-ai-assistant-frontend
