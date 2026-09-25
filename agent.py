@@ -4,7 +4,7 @@ import json,logging,os,sys,time
 from typing import Optional
 from groq import Groq
 from config import MAX_HISTORY_MESSAGES,MAX_ITERATIONS,MAX_RETRIES,MODEL,VISION_MODEL
-from orchestration import plan_prompt, plan_task
+from orchestration import build_execution_plan, plan_prompt, plan_task
 from tools import TOOL_FUNCTIONS,TOOL_SCHEMAS,init_db,load_history,semantic_recall_memories,remember_fact,save_turn
 logger=logging.getLogger(__name__)
 logging.basicConfig(level=os.getenv("LOG_LEVEL","INFO").upper(),format="%(asctime)s | %(levelname)s | %(name)s | %(message)s")
@@ -44,6 +44,8 @@ def run_agent(goal,session_id="default",user_id=0,image_urls=None,rag_sources=No
             from memory import remember_semantic
             remember_semantic(explicit_memory,source="user-explicit",user_id=user_id)
         except Exception as exc:logger.warning("Semantic memory unavailable: %s",exc)
+    task_plan=plan_task(goal)
+    execution_plan=build_execution_plan(task_plan)
     client,messages=Groq(api_key=api_key),build_messages(goal,session_id,user_id=user_id,rag_sources=rag_sources)
     mcp_schemas=[]
     try:
@@ -54,7 +56,7 @@ def run_agent(goal,session_id="default",user_id=0,image_urls=None,rag_sources=No
     tool_schemas=TOOL_SCHEMAS+mcp_schemas
     if image_urls:
         messages[-1]["content"]=[{"type":"text","text":goal}]+[{"type":"image_url","image_url":{"url":url}} for url in image_urls]
-    for _ in range(MAX_ITERATIONS):
+    for _ in range(min(MAX_ITERATIONS, execution_plan.max_tool_rounds)):
         response=None
         for retry in range(MAX_RETRIES+1):
             try:
