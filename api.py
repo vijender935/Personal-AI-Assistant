@@ -5,7 +5,7 @@ import os
 import time
 from typing import Optional
 
-from fastapi import Depends, FastAPI, Header, HTTPException
+from fastapi import Depends, FastAPI, File, Header, HTTPException, UploadFile
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel, Field
 
@@ -14,6 +14,7 @@ from config import ALLOW_SHELL, ensure_directories
 from tools import init_db, recall_memories, remember_fact
 from memory import index_document, index_file, search_rag
 from auth import authenticate, create_session, create_user, get_user, init_auth_db, revoke_session
+from multimodal import save_upload, read_upload
 
 ensure_directories()
 init_db()
@@ -210,7 +211,29 @@ def rag_search(q: str, limit: int = 5):
         raise HTTPException(status_code=500, detail=str(exc)) from exc
 
 
-@app.get("/api/v1")
+@app.post("/api/v1/files/upload")
+async def upload_file(file: UploadFile = File(...), user=Depends(current_user)):
+    if not file.filename:
+        raise HTTPException(status_code=400, detail="Filename is required.")
+    content = await file.read()
+    if len(content) > 10 * 1024 * 1024:
+        raise HTTPException(status_code=413, detail="File is larger than 10 MB.")
+    try:
+        path = save_upload(file.filename, content)
+    except Exception as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+    return {"path": path, "filename": file.filename, "content_type": file.content_type, "size": len(content)}
+
+
+@app.get("/api/v1/files/{path:path}")
+def get_file(path: str, user=Depends(current_user)):
+    try:
+        return read_upload(path)
+    except FileNotFoundError:
+        raise HTTPException(status_code=404, detail="File not found.")
+    except PermissionError as exc:
+        raise HTTPException(status_code=403, detail=str(exc))
+\n@app.get("/api/v1")
 def api_root():
     return {
         "service": "Personal AI Assistant API",
@@ -224,6 +247,6 @@ def api_root():
             "GET /api/v1/memories/search",
             "POST /api/v1/rag/documents",
             "POST /api/v1/rag/files",
-            "GET /api/v1/rag/search",
+            "GET /api/v1/rag/search",\n            "POST /api/v1/files/upload",\n            "GET /api/v1/files/{path}",
         ],
     }
