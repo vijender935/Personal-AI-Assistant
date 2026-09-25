@@ -11,7 +11,7 @@ import time
 from typing import Any
 
 from mcp import Client
-from mcp_registry import load_server_configs
+from mcp_registry import load_server_configs, tool_allowed
 
 _DISCOVERY_CACHE: dict[str, Any] = {"key": None, "expires_at": 0.0, "schemas": []}
 
@@ -54,6 +54,8 @@ async def _discover_async() -> list[dict[str, Any]]:
             async with Client(target, read_timeout_seconds=_timeout_seconds()) as client:
                 result = await client.list_tools()
                 for tool in result.tools:
+                    if not tool_allowed(config, tool.name):
+                        continue
                     schema = getattr(tool, "inputSchema", None) or {"type": "object", "properties": {}}
                     discovered.append({
                         "type": "function",
@@ -87,6 +89,8 @@ async def _call_async(server_name: str, tool_name: str, arguments: dict[str, Any
     config = next((item for item in load_server_configs() if item.name == server_name), None)
     if config is None:
         raise ValueError(f"MCP server {server_name!r} is not configured.")
+    if not tool_allowed(config, tool_name):
+        raise PermissionError(f"MCP tool {tool_name!r} is not allowed for server {server_name!r}.")
     target = _server_target(config)
     async with Client(target, read_timeout_seconds=_timeout_seconds()) as client:
         return await client.call_tool(tool_name, arguments)
