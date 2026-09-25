@@ -1,4 +1,5 @@
 from document_parser import extract_text, is_supported_document
+import document_parser
 
 
 def test_txt_extraction(tmp_path):
@@ -37,9 +38,17 @@ def test_docx_extraction(tmp_path):
     assert "Python | RAG" in text
 
 
+def test_image_ocr_extraction(tmp_path, monkeypatch):
+    path=tmp_path/"scan.png"
+    path.write_bytes(b"not-a-real-image")
+    monkeypatch.setattr(document_parser, "_image_file", lambda _: "OCR text from image")
+    assert extract_text(path) == "OCR text from image"
+
+
 def test_supported_documents():
     assert is_supported_document("report.pdf")
     assert is_supported_document("report.docx")
     assert is_supported_document("data.csv")
     assert is_supported_document("data.json")
-    assert not is_supported_document("image.png")
+    assert is_supported_document("scan.png")
+    assert not is_supported_document("video.mp4")
