@@ -9,13 +9,14 @@ from fastapi import Depends, FastAPI, File, Header, HTTPException, UploadFile
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel, Field
 
-from agent import MODEL, run_agent
-from config import ALLOW_SHELL, ensure_directories
+from agent import MODEL, VISION_MODEL, run_agent
+from config import ALLOW_SHELL, FILE_ROOT, ensure_directories
 from tools import init_db, recall_memories, remember_fact
 from memory import index_document, index_file, search_rag
 from auth import authenticate, create_session, create_user, get_user, init_auth_db, revoke_session
-from multimodal import save_upload, read_upload, image_data_url
+from multimodal import save_upload, read_upload, image_data_url, _safe_path
 from mcp_registry import registry_snapshot
+from document_parser import extract_and_limit, is_supported_document
 
 ensure_directories()
 init_db()
@@ -23,7 +24,7 @@ init_auth_db()
 
 app = FastAPI(
     title="Personal AI Assistant API",
-    version="0.8.0",
+    version="0.9.0",
     description="REST API for the Personal AI Assistant agent engine.",
 )
 
@@ -126,7 +127,7 @@ def health():
 def info():
     return {
         "name": "Personal AI Assistant",
-        "version": "0.8.0",
+        "version": "0.9.0",
         "model": MODEL,
         "shell_enabled": ALLOW_SHELL,
     }
