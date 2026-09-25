@@ -28,6 +28,7 @@ def init_db():
         _ensure_column(con,"memories","user_id","INTEGER NOT NULL DEFAULT 0")
         con.execute("CREATE INDEX IF NOT EXISTS idx_messages_user_session ON messages(user_id,session_id)")
         con.execute("CREATE INDEX IF NOT EXISTS idx_memories_user ON memories(user_id)")
+        con.execute("""CREATE TABLE IF NOT EXISTS chat_metadata(\n            user_id INTEGER NOT NULL, session_id TEXT NOT NULL, title TEXT NOT NULL,\n            PRIMARY KEY(user_id, session_id)\n        )""")
 
 def save_turn(session_id,user_text,assistant_text,user_id=0):
     with sqlite3.connect(DB_PATH) as con:
@@ -148,3 +149,21 @@ TOOL_SCHEMAS=[
  {"type":"function","function":{"name":"write_file","description":"Write a local UTF-8 text file inside the allowed file root.","parameters":{"type":"object","properties":{"path":{"type":"string"},"content":{"type":"string"}},"required":["path","content"]}}},
  {"type":"function","function":{"name":"run_shell","description":"Run an allowlisted local command only when shell access is explicitly enabled.","parameters":{"type":"object","properties":{"command":{"type":"string"}},"required":["command"]}}}
 ]
+
+
+def set_chat_title(session_id, title, user_id=0):
+    title=title.strip()[:80]
+    if not title:
+        raise ValueError("Chat title cannot be empty.")
+    with sqlite3.connect(DB_PATH) as con:
+        con.execute("INSERT INTO chat_metadata(user_id,session_id,title) VALUES(?,?,?) ON CONFLICT(user_id,session_id) DO UPDATE SET title=excluded.title",(user_id,session_id,title))
+
+def get_chat_title(session_id, user_id=0):
+    with sqlite3.connect(DB_PATH) as con:
+        row=con.execute("SELECT title FROM chat_metadata WHERE user_id=? AND session_id=?",(user_id,session_id)).fetchone()
+    return row[0] if row else None
+
+def delete_chat(session_id, user_id=0):
+    with sqlite3.connect(DB_PATH) as con:
+        con.execute("DELETE FROM messages WHERE user_id=? AND session_id=?",(user_id,session_id))
+        con.execute("DELETE FROM chat_metadata WHERE user_id=? AND session_id=?",(user_id,session_id))
