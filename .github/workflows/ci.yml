@@ -15,7 +15,7 @@ jobs:
         with:
           python-version: "3.13"
       - run: pip install -r requirements.txt
-      - run: pytest -q
+      - run: PYTHONPATH=. pytest -q
 
   frontend:
     runs-on: ubuntu-latest
