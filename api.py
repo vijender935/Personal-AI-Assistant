@@ -12,7 +12,7 @@ from pydantic import BaseModel, Field
 from agent import MODEL, VISION_MODEL, run_agent, stream_agent
 from config import ALLOW_SHELL, FILE_ROOT, ensure_directories
 from tools import init_db, recall_memories, remember_fact, load_history, list_sessions
-from memory import index_document, search_rag
+from memory import index_document, search_rag, rag_source_status
 from auth import authenticate, create_session, create_user, get_user, init_auth_db, revoke_session
 from multimodal import save_upload, read_upload, image_data_url, _safe_path
 from mcp_registry import registry_snapshot
@@ -357,6 +357,12 @@ def list_files(user=Depends(current_user)):
             "extension": candidate.suffix.lower(),
             "modified_at": stat.st_mtime,
         })
+    rag_status = {item["source"]: item for item in rag_source_status(user_id=user["id"])}
+    for item in files:
+        status = rag_status.get(item["path"])
+        item["rag_indexed"] = bool(status)
+        item["rag_chunks"] = status["chunks"] if status else 0
+        item["rag_indexed_at"] = status["indexed_at"] if status else None
     return {"files": files}
 
 @app.get("/api/v1/files/{path:path}")
