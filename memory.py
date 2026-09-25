@@ -73,7 +73,7 @@ def index_document(source,content,user_id=0,replace_source=False):
 def index_file(path,user_id=0,replace_source=False):
     candidate=_safe_path(path,user_id)
     if not candidate.is_file():raise FileNotFoundError(path)
-    user_root=candidate.parents[len(candidate.parts)-len(candidate.parts)] if False else (FILE_ROOT/f"user_{user_id}").resolve()
+    user_root=(FILE_ROOT/f"user_{user_id}").resolve()
     source=str(candidate.relative_to(user_root))
     return index_document(source,candidate.read_text(encoding="utf-8",errors="replace"),user_id=user_id,replace_source=replace_source)
 def search_rag(query,limit=5,user_id=0,sources=None):
