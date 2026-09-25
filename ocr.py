@@ -1,13 +1,21 @@
 """CPU-friendly OCR helpers for images and scanned PDF pages."""
 from __future__ import annotations
 
+import os
 from pathlib import Path
 
 _OCR_ENGINE = None
 
 
+def ocr_enabled() -> bool:
+    """OCR is opt-in because RapidOCR/ONNX can use significant RAM."""
+    return os.getenv("ENABLE_OCR", "0").strip().lower() in {"1", "true", "yes", "on"}
+
+
 def _get_engine():
     global _OCR_ENGINE
+    if not ocr_enabled():
+        raise RuntimeError("OCR is disabled. Set ENABLE_OCR=1 to enable it.")
     if _OCR_ENGINE is None:
         from rapidocr import RapidOCR
         _OCR_ENGINE = RapidOCR()
@@ -56,6 +64,8 @@ def ocr_pdf(path: str | Path, dpi: int = 150, max_pages: int = 50) -> str:
 
 
 def ocr_available() -> bool:
+    if not ocr_enabled():
+        return False
     try:
         import rapidocr  # noqa: F401
         import onnxruntime  # noqa: F401
