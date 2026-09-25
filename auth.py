@@ -46,7 +46,12 @@ def authenticate(email: str, password: str):
     if not row or not _verify_password(password,row[3]): return None
     return {"id":row[0],"name":row[1],"email":row[2]}
 
+def _cleanup_expired_sessions() -> None:
+    with sqlite3.connect(DB_PATH) as con:
+        con.execute("DELETE FROM auth_sessions WHERE expires_at <= ?", (time.time(),))
+
 def create_session(user_id: int) -> str:
+    _cleanup_expired_sessions()
     raw=secrets.token_urlsafe(32)
     token_hash=hashlib.sha256(raw.encode()).hexdigest()
     with sqlite3.connect(DB_PATH) as con: con.execute("INSERT INTO auth_sessions(token_hash,user_id,expires_at) VALUES (?,?,?)",(token_hash,user_id,time.time()+SESSION_TTL))
