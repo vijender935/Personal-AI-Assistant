@@ -37,6 +37,14 @@ def _check_auth_rate_limit(key: str) -> None:
     attempts.append(now)
     _auth_attempts[key] = attempts
 
+    # Keep the process-local limiter bounded when many distinct clients/addresses
+    # hit the auth endpoints. Expired buckets are safe to discard.
+    if len(_auth_attempts) > 10000:
+        cutoff = now - AUTH_RATE_WINDOW
+        for bucket_key, bucket in list(_auth_attempts.items()):
+            if not bucket or bucket[-1] < cutoff:
+                _auth_attempts.pop(bucket_key, None)
+
 def _client_key(request) -> str:
     return request.client.host if request.client else "unknown"
 
