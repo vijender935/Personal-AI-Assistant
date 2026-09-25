@@ -8,7 +8,8 @@ const API=import.meta.env.VITE_API_URL || "http://127.0.0.1:8000";
 const initial=[{id:1,title:"New conversation",messages:[]}];
 
 function App(){
- const [chats,setChats]=useState(initial),[active,setActive]=useState(1),[text,setText]=useState(""),[loading,setLoading]=useState(false),[sidebar,setSidebar]=useState(true),[settings,setSettings]=useState(false),[user,setUser]=useState(null),[auth,setAuth]=useState({email:"",password:"",name:""}),[authMode,setAuthMode]=useState("login"),[attachments,setAttachments]=useState([]);\n const [streamController,setStreamController]=useState(null);
+ const [chats,setChats]=useState(initial),[active,setActive]=useState(1),[text,setText]=useState(""),[loading,setLoading]=useState(false),[sidebar,setSidebar]=useState(true),[settings,setSettings]=useState(false),[user,setUser]=useState(null),[auth,setAuth]=useState({email:"",password:"",name:""}),[authMode,setAuthMode]=useState("login"),[attachments,setAttachments]=useState([]);
+ const [streamController,setStreamController]=useState(null);
  const chat=chats.find(c=>c.id===active)||chats[0];
  const token=localStorage.getItem("personal_ai_token");
  useEffect(()=>{if(!token)return;fetch(API+"/api/v1/auth/me",{headers:{Authorization:"Bearer "+token}}).then(async r=>{if(r.ok){const d=await r.json();setUser(d.user)}else{localStorage.removeItem("personal_ai_token");setUser(null)}}).catch(()=>{});},[token]);
@@ -20,7 +21,8 @@ function App(){
  if(!user&&!token)return <div className="auth-screen"><div className="auth-card"><div className="welcome-logo">✦</div><h1>{authMode==="login"?"Welcome back":"Create account"}</h1>{authMode==="register"&&<input placeholder="Name" value={auth.name} onChange={e=>setAuth({...auth,name:e.target.value})}/>}<input placeholder="Email" type="email" value={auth.email} onChange={e=>setAuth({...auth,email:e.target.value})}/><input placeholder="Password" type="password" value={auth.password} onChange={e=>setAuth({...auth,password:e.target.value})}/><button className="auth-submit" onClick={authSubmit}>{authMode==="login"?"Login":"Sign up"}</button><button className="auth-switch" onClick={()=>setAuthMode(authMode==="login"?"register":"login")}>{authMode==="login"?"Create an account":"Already have an account? Login"}</button></div></div>;
  const update=(messages)=>setChats(cs=>cs.map(c=>c.id===active?{...c,messages,title:c.messages.length?c.title:(messages[0]?.content||"New conversation").slice(0,32)}:c));
  async function send(){
-  const message=text.trim(); if(!message||loading)return;\n  const controller=new AbortController(); setStreamController(controller);
+  const message=text.trim(); if(!message||loading)return;
+  const controller=new AbortController(); setStreamController(controller);
   const next=[...chat.messages,{role:"user",content:message},{role:"assistant",content:""}];
   update(next); setText(""); setLoading(true);
   try{
@@ -43,4 +45,5 @@ function App(){
   }catch(e){
    update([...next.slice(0,-1),{role:"user",content:message},{role:"assistant",content:"Backend se connection nahi ho paaya. FastAPI server check karo."}]);
   }finally{setLoading(false);setStreamController(null);}
- }\n function stopStream(){streamController?.abort();setStreamController(null);setLoading(false);}\n;
+ }
+ function stopStream(){streamController?.abort();setStreamController(null);setLoading(false);}
