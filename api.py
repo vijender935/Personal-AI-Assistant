@@ -11,7 +11,7 @@ from pydantic import BaseModel, Field
 
 from agent import MODEL, VISION_MODEL, run_agent, stream_agent
 from config import ALLOW_SHELL, FILE_ROOT, ensure_directories
-from tools import init_db, recall_memories, remember_fact, load_history, list_sessions, set_chat_title, get_chat_title, delete_chat
+from tools import init_db, recall_memories, remember_fact, load_history, list_sessions, set_chat_title, get_chat_title, delete_chat, remove_last_assistant, remove_last_turn
 from memory import index_document, search_rag, rag_source_status
 from auth import authenticate, create_session, create_user, get_user, init_auth_db, revoke_session
 from multimodal import save_upload, read_upload, image_data_url, _safe_path
@@ -248,6 +248,44 @@ def rename_chat(session_id: str, request: ChatTitleRequest, user=Depends(current
         raise HTTPException(status_code=404, detail="Chat not found.")
     set_chat_title(internal_id, request.title, user_id=user["id"])
     return {"session_id": session_id, "title": request.title.strip()}
+
+@app.post("/api/v1/chats/{session_id}/regenerate")
+def regenerate_chat(session_id: str, user=Depends(current_user)):
+    if not session_id or len(session_id) > 200:
+        raise HTTPException(status_code=400, detail="Invalid session id.")
+    internal_id = f"user-{user['id']}-{session_id}"
+    history = load_history(internal_id, limit=100, user_id=user["id"])
+    if not history or history[-1]["role"] != "assistant":
+        raise HTTPException(status_code=400, detail="No assistant response available to regenerate.")
+    if not remove_last_assistant(internal_id, user_id=user["id"]):
+        raise HTTPException(status_code=400, detail="Unable to regenerate response.")
+    user_message = next((m["content"] for m in reversed(history[:-1]) if m["role"] == "user"), None)
+    if not user_message:
+        raise HTTPException(status_code=400, detail="No user message available.")
+    try:
+        answer = run_agent(user_message, session_id=internal_id, user_id=user["id"], verbose=False)
+    except Exception as exc:
+        raise HTTPException(status_code=500, detail="Regeneration failed.") from exc
+    return {"session_id": session_id, "answer": answer}
+
+@app.post("/api/v1/chats/{session_id}/edit")
+def edit_last_message(session_id: str, request: ChatRequest, user=Depends(current_user)):
+    if not session_id or len(session_id) > 200:
+        raise HTTPException(status_code=400, detail="Invalid session id.")
+    message = request.message.strip()
+    if not message:
+        raise HTTPException(status_code=400, detail="Message cannot be empty.")
+    internal_id = f"user-{user['id']}-{session_id}"
+    history = load_history(internal_id, limit=100, user_id=user["id"])
+    if len(history) < 2 or history[-2]["role"] != "user" or history[-1]["role"] != "assistant":
+        raise HTTPException(status_code=400, detail="Last turn cannot be edited.")
+    if not remove_last_turn(internal_id, user_id=user["id"]):
+        raise HTTPException(status_code=400, detail="Unable to edit last turn.")
+    try:
+        answer = run_agent(message, session_id=internal_id, user_id=user["id"], verbose=False)
+    except Exception as exc:
+        raise HTTPException(status_code=500, detail="Edit and resend failed.") from exc
+    return {"session_id": session_id, "message": message, "answer": answer}
 
 @app.delete("/api/v1/chats/{session_id}")
 def remove_chat(session_id: str, user=Depends(current_user)):
