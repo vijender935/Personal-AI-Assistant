@@ -5,3 +5,5 @@ pytest
 fastapi
 uvicorn[standard]
 httpx
+sentence-transformers
+numpy
