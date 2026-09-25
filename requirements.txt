@@ -2,3 +2,5 @@ groq
 ddgs
 gradio
 pytest
+fastapi
+uvicorn[standard]
