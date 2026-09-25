@@ -12,6 +12,13 @@ from mcp_registry import load_server_configs, tool_allowed
 _DISCOVERY_CACHE: dict[str, Any] = {"key": None, "expires_at": 0.0, "schemas": []}
 
 
+def _safe_tool_component(value: str) -> str:
+    """Convert MCP names to provider-safe function-name components."""
+    import re
+    normalized = re.sub(r"[^A-Za-z0-9_-]+", "_", str(value)).strip("_")
+    return normalized or "tool"
+
+
 def _timeout_seconds() -> float:
     try:
         value = float(os.getenv("MCP_TIMEOUT_SECONDS", "30"))
@@ -64,7 +71,7 @@ async def _discover_async(user_id: int = 0) -> list[dict[str, Any]]:
                     discovered.append({
                         "type": "function",
                         "function": {
-                            "name": f"mcp__{config.name}__{tool.name}",
+                            "name": f"mcp__{_safe_tool_component(config.name)}__{_safe_tool_component(tool.name)}",
                             "description": tool.description or f"MCP tool {tool.name}",
                             "parameters": schema,
                         },
@@ -117,9 +124,16 @@ def call_tool(name: str, arguments: dict[str, Any], user_id: int = 0) -> str:
     parts = name.split("__", 2)
     if len(parts) != 3:
         raise ValueError("Invalid MCP tool name.")
-    server_name, tool_name = parts[1], parts[2]
+    server_key, tool_name = parts[1], parts[2]
+    configs = load_server_configs(user_id)
+    config = next(
+        (item for item in configs if _safe_tool_component(item.name) == server_key),
+        None,
+    )
+    if config is None:
+        raise ValueError(f"MCP server {server_key!r} is not configured.")
     result = asyncio.run(asyncio.wait_for(
-        _call_async(server_name, tool_name, arguments, user_id),
+        _call_async(config.name, tool_name, arguments, user_id),
         timeout=_timeout_seconds(),
     ))
     return _content_to_text(result)
