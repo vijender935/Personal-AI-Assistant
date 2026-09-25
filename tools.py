@@ -107,27 +107,42 @@ def web_search(query):
     except ImportError:return "Error: install the 'ddgs' package first."
     except Exception as exc:return f"Error: {exc}"
 
-def _safe_path(path):
-    ensure_directories()
-    candidate=(FILE_ROOT/path).resolve() if not Path(path).is_absolute() else Path(path).expanduser().resolve()
-    try:candidate.relative_to(FILE_ROOT.resolve())
-    except ValueError as exc:raise PermissionError(f"path is outside the allowed file root: {FILE_ROOT}") from exc
+def _user_root(user_id=0):
+    try:
+        uid = int(user_id)
+    except (TypeError, ValueError) as exc:
+        raise PermissionError("invalid user id") from exc
+    if uid < 0:
+        raise PermissionError("invalid user id")
+    root = (FILE_ROOT / f"user_{uid}").resolve()
+    root.mkdir(parents=True, exist_ok=True)
+    return root
+
+
+def _safe_path(path, user_id=0):
+    root = _user_root(user_id)
+    candidate = (root / path).resolve() if not Path(path).is_absolute() else Path(path).expanduser().resolve()
+    try:
+        candidate.relative_to(root)
+    except ValueError as exc:
+        raise PermissionError("path is outside the user's allowed file root") from exc
     return candidate
 
-def read_file(path):
+
+def read_file(path, user_id=0):
     try:
-        p=_safe_path(path)
+        p=_safe_path(path, user_id)
         if not p.is_file():return "Error: file not found"
         return p.read_text(encoding="utf-8",errors="replace")[:MAX_FILE_CHARS]
     except Exception as exc:return f"Error: {exc}"
 
-def write_file(path,content):
+def write_file(path,content,user_id=0):
     try:
-        p=_safe_path(path);p.parent.mkdir(parents=True,exist_ok=True);p.write_text(content,encoding="utf-8")
-        return f"Written {len(content)} chars to {p.relative_to(FILE_ROOT)}"
+        p=_safe_path(path, user_id);p.parent.mkdir(parents=True,exist_ok=True);p.write_text(content,encoding="utf-8")
+        return f"Written {len(content)} chars to {p.relative_to(_user_root(user_id))}"
     except Exception as exc:return f"Error: {exc}"
 
-def run_shell(command):
+def run_shell(command,user_id=0):
     if not ALLOW_SHELL:return "Shell tool disabled. Set ALLOW_SHELL=1 explicitly to enable it."
     try:parts=shlex.split(command)
     except ValueError as exc:return f"Error: invalid shell syntax: {exc}"
@@ -135,7 +150,7 @@ def run_shell(command):
     executable=Path(parts[0]).name
     if executable not in ALLOWED_SHELL_COMMANDS:return f"Blocked: command '{executable}' is not allowlisted."
     try:
-        result=subprocess.run(parts,cwd=FILE_ROOT,capture_output=True,text=True,timeout=SHELL_TIMEOUT,shell=False)
+        result=subprocess.run(parts,cwd=_user_root(user_id),capture_output=True,text=True,timeout=SHELL_TIMEOUT,shell=False)
         output=(result.stdout+result.stderr).strip() or "(no output)"
         return f"exit_code={result.returncode}\n{output[-MAX_SHELL_OUTPUT:]}"
     except subprocess.TimeoutExpired:return f"Error: shell command timed out after {SHELL_TIMEOUT} seconds."
