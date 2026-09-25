@@ -7,3 +7,4 @@ uvicorn[standard]
 httpx
 sentence-transformers
 numpy
+mcp>=2,<3
