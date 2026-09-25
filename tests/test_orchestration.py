@@ -67,3 +67,17 @@ def test_tool_result_validation_and_recovery():
     assert failed.ok is False
     assert failed.recoverable is True
     assert "Do not invent missing data" in recovery_instruction("calculator", failed)
+
+
+
+def test_execution_state_failure_guard():
+    from orchestration import ExecutionState, should_continue_execution
+
+    state = ExecutionState(round_number=1, consecutive_failures=0)
+    assert should_continue_execution(state, 4)
+    state.consecutive_failures = 2
+    assert not should_continue_execution(state, 4)
+
+    state.consecutive_failures = 0
+    state.round_number = 4
+    assert not should_continue_execution(state, 4)
