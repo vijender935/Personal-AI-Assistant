@@ -18,7 +18,7 @@ from db import connect
 from tools import init_db, recall_memories, remember_fact, load_history, list_sessions, set_chat_title, get_chat_title, delete_chat, remove_last_assistant, remove_last_turn, save_turn
 from memory import index_document, search_rag, rag_source_status, delete_semantic_memory, delete_rag_source, remember_semantic
 from auth import authenticate, create_session, create_user, get_user, init_auth_db, revoke_session
-from multimodal import save_upload, read_upload, image_data_url, _safe_path
+from multimodal import save_upload, read_upload, image_data_url, ensure_local_file, _safe_path
 from mcp_registry import registry_snapshot
 from connectors import init_connectors_db, list_connectors, upsert_connector, delete_connector
 from document_parser import extract_and_limit, is_supported_document
@@ -222,6 +222,8 @@ def chat(request: ChatRequest, user=Depends(current_user)):
             rag_sources=rag_sources or None,
             verbose=False,
         )
+    except HTTPException:
+        raise
     except Exception as exc:
         raise HTTPException(status_code=500, detail="Agent execution failed.") from exc
 
@@ -246,7 +248,7 @@ def chat_stream(request: ChatRequest, user=Depends(current_user)):
             attachment_urls.append(image_data_url(path, user_id=user["id"]))
         except ValueError:
             try:
-                candidate = _safe_path(path, user["id"])
+                candidate = ensure_local_file(path, user["id"])
                 if not is_supported_document(candidate):
                     raise ValueError("unsupported attachment type")
                 user_root = (FILE_ROOT / f"user_{user['id']}").resolve()
@@ -328,7 +330,7 @@ def regenerate_chat(session_id: str, user=Depends(current_user)):
         raise HTTPException(status_code=400, detail="Unable to regenerate response.")
     user_message = next((m["content"] for m in reversed(history[:-1]) if m["role"] == "user"), None)
     if not user_message:
-        raise HTTPException(status_code=400, detail="No user message available." )
+        raise HTTPException(status_code=400, detail="No user message available.")
     try:
         answer = run_agent(user_message, session_id=internal_id, user_id=user["id"], verbose=False)
     except Exception as exc:
@@ -411,7 +413,7 @@ def search_memories(q: str, limit: int = 8, user=Depends(current_user)):
     if not q.strip():
         raise HTTPException(status_code=400, detail="Query cannot be empty.")
     limit = max(1, min(limit, 50))
-    return {"query": q, "memories": recall_memories(q, limit=limit, user_id=user["id"])}
+    return {"query": q, "memories": recall_memories(q, limit=limit, user_id=user["id"])
 
 
 class RAGDocumentRequest(BaseModel):
