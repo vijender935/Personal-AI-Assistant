@@ -27,7 +27,7 @@ init_auth_db()
 
 app = FastAPI(
     title="Personal AI Assistant API",
-    version="0.10.0",
+    version="0.11.0",
     description="REST API for the Personal AI Assistant agent engine.",
 )
 
