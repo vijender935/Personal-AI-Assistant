@@ -1,186 +1,86 @@
-"""
-Personal AI Agent — conversational + persistent memory + local tools.
-
-Run:
-    python agent.py
-    python agent.py "Delhi ka weather kya hai?"
-"""
-
-import json
-import os
-import sys
-import time
+"""Personal AI Agent — conversational + persistent memory + local tools."""
+from __future__ import annotations
+import json, logging, os, sys, time
 from typing import Optional
-
 from groq import Groq
-from tools import (
-    TOOL_FUNCTIONS,
-    TOOL_SCHEMAS,
-    init_db,
-    load_history,
-    save_turn,
-    remember_fact,
-    recall_memories,
-)
+from config import MAX_HISTORY_MESSAGES, MAX_ITERATIONS, MAX_RETRIES, MODEL
+from tools import TOOL_FUNCTIONS, TOOL_SCHEMAS, init_db, load_history, recall_memories, remember_fact, save_turn
 
-MODEL = os.getenv("GROQ_MODEL", "openai/gpt-oss-120b")
-MAX_ITERATIONS = int(os.getenv("MAX_ITERATIONS", "8"))
-MAX_HISTORY_MESSAGES = int(os.getenv("MAX_HISTORY_MESSAGES", "30"))
-
+logger = logging.getLogger(__name__)
+logging.basicConfig(level=os.getenv("LOG_LEVEL","INFO").upper(), format="%(asctime)s | %(levelname)s | %(name)s | %(message)s")
 SYSTEM_PROMPT = """Tum ek helpful personal AI assistant ho.
 User se natural Hinglish me baat karo.
 Context ko yaad rakho aur previous conversation ko use karo.
-Jab current information, calculation, file operation ya shell task ki zaroorat ho,
-appropriate tool use karo. Tool ki zaroorat na ho to directly jawab do.
-Tool results ko clearly explain karo. Kabhi bhi tool ka result invent mat karo.
+Jab current information, calculation, file operation ya shell task ki zaroorat ho, appropriate tool use karo.
+Tool results ko clearly explain karo. Kabhi bhi tool result invent mat karo.
 Dangerous/destructive local actions se bacho.
 """
 
-
 def _extract_memory_candidate(text: str) -> Optional[str]:
-    """Lightweight explicit-memory detector; user can also use /remember."""
     lower = text.lower().strip()
-    prefixes = (
-        "remember that ",
-        "yaad rakhna ",
-        "yaad rakho ",
-        "note that ",
-        "remember: ",
-        "yaad rakho:",
-    )
+    prefixes = ("remember that ","yaad rakhna ","yaad rakho ","note that ","remember: ","yaad rakho:")
     for prefix in prefixes:
-        if lower.startswith(prefix):
-            return text.strip()[len(prefix):].strip()
+        if lower.startswith(prefix): return text.strip()[len(prefix):].strip()
     return None
 
-
-def build_messages(goal: str, session_id: str):
-    history = load_history(session_id, MAX_HISTORY_MESSAGES)
-    memories = recall_memories(goal, limit=8)
-
-    messages = [{"role": "system", "content": SYSTEM_PROMPT}]
+def build_messages(goal: str, session_id: str) -> list[dict]:
+    history, memories = load_history(session_id, MAX_HISTORY_MESSAGES), recall_memories(goal, limit=8)
+    messages = [{"role":"system","content":SYSTEM_PROMPT}]
     if memories:
-        memory_text = "\n".join(f"- {m}" for m in memories)
-        messages.append(
-            {
-                "role": "system",
-                "content": f"Relevant saved memories:\n{memory_text}",
-            }
-        )
-    messages.extend(history)
-    messages.append({"role": "user", "content": goal})
-    return messages
-
+        messages.append({"role":"system","content":"Relevant saved memories:\n" + "\n".join(f"- {m}" for m in memories)})
+    messages.extend(history); messages.append({"role":"user","content":goal}); return messages
 
 def run_agent(goal: str, session_id: str = "default", verbose: bool = True) -> str:
+    goal = goal.strip()
+    if not goal: return "Please enter a message."
     api_key = os.getenv("GROQ_API_KEY")
-    if not api_key:
-        return "❌ GROQ_API_KEY set nahi hai. README.md dekho setup ke liye."
-
-    client = Groq(api_key=api_key)
-    messages = build_messages(goal, session_id)
-
+    if not api_key: return "❌ GROQ_API_KEY set nahi hai. README.md dekho setup ke liye."
     explicit_memory = _extract_memory_candidate(goal)
-    if explicit_memory:
-        remember_fact(explicit_memory, source="user-explicit")
+    if explicit_memory: remember_fact(explicit_memory, source="user-explicit")
+    client, messages = Groq(api_key=api_key), build_messages(goal, session_id)
 
-    for attempt in range(MAX_ITERATIONS):
-        try:
-            response = client.chat.completions.create(
-                model=MODEL,
-                messages=messages,
-                tools=TOOL_SCHEMAS,
-                tool_choice="auto",
-                temperature=0.4,
-            )
-        except Exception as exc:
-            if attempt < 2:
-                time.sleep(2 ** attempt)
-                continue
-            return f"❌ Model/API error: {exc}"
-
+    for _ in range(MAX_ITERATIONS):
+        response = None
+        for retry in range(MAX_RETRIES + 1):
+            try:
+                response = client.chat.completions.create(model=MODEL, messages=messages, tools=TOOL_SCHEMAS, tool_choice="auto", temperature=0.4)
+                break
+            except Exception as exc:
+                logger.warning("Model request failed (retry %s): %s", retry, exc)
+                if retry < MAX_RETRIES: time.sleep(2 ** retry)
+        if response is None: return "❌ Model/API request failed after retries. Logs me details available hain."
         msg = response.choices[0].message
-        assistant_payload = msg.model_dump(exclude_none=True)
-        messages.append(assistant_payload)
-
+        messages.append(msg.model_dump(exclude_none=True))
         if not msg.tool_calls:
-            answer = msg.content or ""
-            save_turn(session_id, goal, answer)
-            return answer
-
+            answer = msg.content or ""; save_turn(session_id, goal, answer); return answer
         for call in msg.tool_calls:
             name = call.function.name
-            try:
-                args = json.loads(call.function.arguments or "{}")
-            except json.JSONDecodeError:
-                args = {}
-
-            if verbose:
-                print(f"🔧 {name}({args})")
-
+            try: args = json.loads(call.function.arguments or "{}")
+            except json.JSONDecodeError: args = {}
+            if verbose: logger.info("Tool call: %s(%s)", name, args)
             fn = TOOL_FUNCTIONS.get(name)
-            if not fn:
-                result = f"Unknown tool: {name}"
-            else:
-                try:
-                    result = fn(**args)
-                except Exception as exc:
-                    result = f"Tool error in {name}: {exc}"
+            try: result = fn(**args) if fn else f"Unknown tool: {name}"
+            except Exception as exc:
+                logger.exception("Tool failed: %s", name); result = f"Tool error in {name}: {exc}"
+            messages.append({"role":"tool","tool_call_id":call.id,"name":name,"content":str(result)})
+    return f"⚠️ Max tool iterations ({MAX_ITERATIONS}) reached — task incomplete reh gaya."
 
-            messages.append(
-                {
-                    "role": "tool",
-                    "tool_call_id": call.id,
-                    "name": name,
-                    "content": str(result),
-                }
-            )
-
-    return "⚠️ Max iterations reached — task incomplete reh gaya."
-
-
-def interactive():
-    session_id = os.getenv("AGENT_SESSION", "default")
-    print(f"Personal AI Agent — model: {MODEL}")
-    print("Commands: /new, /remember <fact>, /memories, /exit\n")
-
+def interactive() -> None:
+    session_id = os.getenv("AGENT_SESSION","default")
+    print(f"Personal AI Agent — model: {MODEL}"); print("Commands: /new, /remember <fact>, /memories, /exit\n")
     while True:
-        try:
-            goal = input("Tum: ").strip()
-        except (EOFError, KeyboardInterrupt):
-            print()
-            break
-
-        if not goal:
-            continue
-
+        try: goal = input("Tum: ").strip()
+        except (EOFError, KeyboardInterrupt): print(); break
+        if not goal: continue
         command = goal.lower()
-        if command in {"/exit", "/quit", "exit", "quit"}:
-            break
-
-        if command == "/new":
-            session_id = f"session-{int(time.time())}"
-            print(f"🆕 New session: {session_id}\n")
-            continue
-
+        if command in {"/exit","/quit","exit","quit"}: break
+        if command == "/new": session_id=f"session-{time.time_ns()}"; print(f"🆕 New session: {session_id}\n"); continue
         if command == "/memories":
-            memories = recall_memories("", limit=50)
-            print("\n".join(f"- {m}" for m in memories) or "(no memories)")
-            print()
-            continue
-
+            memories=recall_memories("",limit=50); print("\n".join(f"- {m}" for m in memories) or "(no memories)"); print(); continue
         if command.startswith("/remember "):
-            fact = goal[len("/remember "):].strip()
-            remember_fact(fact, source="user-command")
-            print("🧠 Memory saved.\n")
-            continue
-
+            remember_fact(goal[len("/remember "):].strip(), source="user-command"); print("🧠 Memory saved.\n"); continue
         print("\nAgent:", run_agent(goal, session_id=session_id), "\n")
-
 
 if __name__ == "__main__":
     init_db()
-    if len(sys.argv) > 1:
-        print(run_agent(" ".join(sys.argv[1:])))
-    else:
-        interactive()
+    print(run_agent(" ".join(sys.argv[1:]))) if len(sys.argv)>1 else interactive()
