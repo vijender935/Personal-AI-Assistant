@@ -321,3 +321,70 @@ Run:
 The embedding model is loaded lazily. The first semantic-memory or RAG operation may download the model and take longer than later requests.
 
 The first implementation intentionally uses SQLite instead of requiring a separate vector database, keeping the local RAG stack simple and free for personal-scale datasets.
+
+
+## Phase 9 — Agentic Tools + MCP
+
+Phase 9 adds a standard Model Context Protocol (MCP) server around the assistant's tool layer.
+
+### MCP server
+
+File:
+
+    mcp_server.py
+
+The MCP server exposes:
+
+    calculate
+    search_web
+    read_text_file
+    write_text_file
+    execute_command
+    add_knowledge
+    add_knowledge_file
+    search_knowledge
+
+This makes the assistant's capabilities consumable by MCP-compatible hosts and agents instead of being hard-wired to one UI.
+
+### Run MCP locally
+
+Install dependencies:
+
+    pip install -r requirements.txt
+
+For stdio:
+
+    python mcp_server.py
+
+For Streamable HTTP:
+
+    mcp run mcp_server.py --transport streamable-http
+
+### Phase 9 architecture
+
+    Chat / Future UI
+             |
+             v
+        Agent Engine
+          /       \
+         /         \
+    Groq LLM    MCP Tool Layer
+                    |
+          +---------+---------+
+          |         |         |
+        Web/File  Shell      RAG
+                  optional
+
+The MCP server is separated from the model provider, so the same tools can later be consumed by another model, agent, IDE, MCP host, or custom frontend.
+
+### Security
+
+Phase 6 security controls remain active:
+
+- File operations stay inside AGENT_FILE_ROOT.
+- Shell remains disabled by default.
+- Shell commands remain allowlisted.
+- Shell uses shell=False and a timeout.
+- RAG file indexing uses the same file sandbox.
+
+The MCP layer does not bypass these controls.
