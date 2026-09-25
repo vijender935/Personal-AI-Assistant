@@ -10,8 +10,8 @@ _model=None
 def _get_model():
     global _model
     if _model is None:
-        from sentence_transformers import SentenceTransformer
-        _model=SentenceTransformer(MODEL_NAME)
+        from fastembed import TextEmbedding
+        _model=TextEmbedding(model_name=MODEL_NAME)
     return _model
 def _embedding(text):
     import numpy as np
