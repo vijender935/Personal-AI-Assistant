@@ -80,7 +80,7 @@ def run_agent(goal,session_id="default",user_id=0,image_urls=None,rag_sources=No
             fn=TOOL_FUNCTIONS.get(name)
             try:
                 if fn:
-                    result=fn(**args)
+                    result=fn(**args, user_id=user_id)
                 elif name.startswith("mcp__"):
                     from mcp_client import call_tool
                     result=call_tool(name,args)
