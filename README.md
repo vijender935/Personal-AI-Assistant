@@ -142,3 +142,110 @@ User
 ## Phase 7
 
 Next, the agent engine will be exposed through a proper FastAPI REST API so a future React/Next.js frontend can communicate with it cleanly.
+
+
+## Phase 7 — FastAPI REST API
+
+The agent engine is now exposed through a REST API. This separates the AI backend from the future web/mobile frontend.
+
+### Run the API
+
+Install dependencies:
+
+    pip install -r requirements.txt
+
+Start the development server:
+
+    uvicorn api:app --reload
+
+The API will be available at:
+
+    http://127.0.0.1:8000
+
+FastAPI interactive documentation:
+
+    http://127.0.0.1:8000/docs
+
+OpenAPI schema:
+
+    http://127.0.0.1:8000/openapi.json
+
+### API endpoints
+
+#### Health
+
+    GET /health
+
+Returns service status, model name, and whether shell access is enabled.
+
+#### Chat
+
+    POST /api/v1/chat
+
+Request:
+
+    {
+      "message": "Hello",
+      "session_id": "default"
+    }
+
+Response:
+
+    {
+      "answer": "...",
+      "session_id": "default",
+      "model": "openai/gpt-oss-120b"
+    }
+
+The API keeps the session identifier and passes it to the existing SQLite conversation-memory layer.
+
+#### Memories
+
+Create a memory:
+
+    POST /api/v1/memories
+
+    {
+      "fact": "Mera naam Vijender hai",
+      "source": "api"
+    }
+
+List memories:
+
+    GET /api/v1/memories
+
+Search memories:
+
+    GET /api/v1/memories/search?q=Vijender
+
+### CORS
+
+Allowed frontend origins are configured through CORS_ORIGINS.
+
+Example:
+
+    export CORS_ORIGINS="http://localhost:3000,http://localhost:5173"
+
+This prepares the backend for a future React/Next.js frontend.
+
+### API architecture
+
+    React / Next.js / Mobile
+              |
+              | HTTP + JSON
+              v
+         FastAPI API
+              |
+              v
+         Agent Engine
+          /    |    \
+       Memory LLM  Tools
+              |
+              v
+        SQLite / external services
+
+### Run tests
+
+    pytest -q
+
+Phase 7 adds API-level tests for health, service info, memory operations, and missing API-key handling.
