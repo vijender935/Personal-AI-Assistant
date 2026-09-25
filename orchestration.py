@@ -11,6 +11,13 @@ class ExecutionPlan:
 
 
 @dataclass(frozen=True)
+class ToolResult:
+    ok: bool
+    content: str
+    recoverable: bool = False
+
+
+@dataclass(frozen=True)
 class TaskPlan:
     intent: str
     needs_memory: bool
@@ -82,6 +89,29 @@ def plan_task(goal: str) -> TaskPlan:
         needs_local_tools=needs_local,
         needs_mcp=needs_mcp,
         complexity=complexity,
+    )
+
+
+def validate_tool_result(result: object) -> ToolResult:
+    if result is None:
+        return ToolResult(False, "Tool returned no result.", recoverable=True)
+    content = str(result).strip()
+    if not content:
+        return ToolResult(False, "Tool returned an empty result.", recoverable=True)
+    lowered = content.lower()
+    if lowered.startswith(("tool error", "unknown tool", "error:")):
+        return ToolResult(False, content, recoverable=True)
+    return ToolResult(True, content)
+
+
+def recovery_instruction(tool_name: str, result: ToolResult) -> str:
+    if result.ok:
+        return ""
+    return (
+        f"Tool '{tool_name}' did not produce a valid result. "
+        f"Result: {result.content} "
+        "Do not invent missing data. Re-check arguments or choose another available tool; "
+        "if recovery is unsafe or impossible, explain the limitation to the user."
     )
 
 
