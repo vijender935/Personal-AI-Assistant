@@ -86,7 +86,7 @@ def index_file(path,user_id=0,replace_source=False):
 def search_rag(query,limit=5,user_id=0,sources=None):
     query=query.strip()
     if not query:return []
-    init_semantic_store();q=_vector(_embedding(query))
+    init_semantic_store();q=_vector(_embedding(query,"query"))
     with sqlite3.connect(DB_PATH) as con:
         if sources:
             placeholders=",".join("?" for _ in sources)
