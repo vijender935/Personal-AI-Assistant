@@ -6,23 +6,25 @@
   "scripts": {
     "dev": "vite",
     "build": "vite build",
+    "test": "vitest run",
     "preview": "vite preview",
     "cap:add": "cap add android",
     "cap:sync": "cap sync android",
     "android:build": "cd android && ./gradlew assembleDebug"
   },
   "dependencies": {
-    "@capacitor/android": "latest",
-    "@capacitor/core": "latest",
-    "@vitejs/plugin-react": "latest",
-    "vite": "latest",
-    "react": "latest",
-    "react-dom": "latest",
-    "lucide-react": "latest",
-    "react-markdown": "latest",
-    "remark-gfm": "latest"
+    "@capacitor/android": "8.5.2",
+    "@capacitor/core": "8.5.2",
+    "vite": "8.3.1",
+    "react": "19.3.0",
+    "react-dom": "19.3.0",
+    "lucide-react": "1.48.0",
+    "react-markdown": "10.1.0",
+    "remark-gfm": "4.0.1"
   },
   "devDependencies": {
-    "@capacitor/cli": "latest"
+    "@capacitor/cli": "8.5.2",
+    "vitest": "3.2.4",
+    "@vitejs/plugin-react": "6.1.1"
   }
 }

@@ -6,23 +6,47 @@ import time
 import logging
 from typing import Optional
 
-from fastapi import Depends, FastAPI, File, Header, HTTPException, UploadFile
+from fastapi import Depends, FastAPI, File, Header, HTTPException, UploadFile, Request
 from fastapi.responses import FileResponse, StreamingResponse
 from fastapi.middleware.cors import CORSMiddleware
 from starlette.middleware.base import BaseHTTPMiddleware
 from pydantic import BaseModel, Field
 
 from agent import MODEL, VISION_MODEL, run_agent, stream_agent
-from config import ALLOW_SHELL, FILE_ROOT, ensure_directories
+from config import ALLOW_SHELL, DB_PATH, FILE_ROOT, ensure_directories
+from db import connect
 from tools import init_db, recall_memories, remember_fact, load_history, list_sessions, set_chat_title, get_chat_title, delete_chat, remove_last_assistant, remove_last_turn, save_turn
-from memory import index_document, search_rag, rag_source_status
+from memory import index_document, search_rag, rag_source_status, delete_semantic_memory, delete_rag_source, remember_semantic
 from auth import authenticate, create_session, create_user, get_user, init_auth_db, revoke_session
-from multimodal import save_upload, read_upload, image_data_url, _safe_path
+from multimodal import save_upload, read_upload, image_data_url, ensure_local_file, _safe_path
 from mcp_registry import registry_snapshot
 from connectors import init_connectors_db, list_connectors, upsert_connector, delete_connector
 from document_parser import extract_and_limit, is_supported_document
 
 logger = logging.getLogger(__name__)
+
+AUTH_RATE_LIMIT = max(1, int(os.getenv("AUTH_RATE_LIMIT", "10")))
+AUTH_RATE_WINDOW = max(1, int(os.getenv("AUTH_RATE_WINDOW", "60")))
+_auth_attempts: dict[str, list[float]] = {}
+
+def _check_auth_rate_limit(key: str) -> None:
+    now = time.monotonic()
+    attempts = [stamp for stamp in _auth_attempts.get(key, []) if now - stamp < AUTH_RATE_WINDOW]
+    if len(attempts) >= AUTH_RATE_LIMIT:
+        raise HTTPException(status_code=429, detail="Too many authentication attempts. Try again later.")
+    attempts.append(now)
+    _auth_attempts[key] = attempts
+
+    # Keep the process-local limiter bounded when many distinct clients/addresses
+    # hit the auth endpoints. Expired buckets are safe to discard.
+    if len(_auth_attempts) > 10000:
+        cutoff = now - AUTH_RATE_WINDOW
+        for bucket_key, bucket in list(_auth_attempts.items()):
+            if not bucket or bucket[-1] < cutoff:
+                _auth_attempts.pop(bucket_key, None)
+
+def _client_key(request) -> str:
+    return request.client.host if request.client else "unknown"
 
 ensure_directories()
 init_db()
@@ -47,6 +71,18 @@ app.add_middleware(
     allow_methods=["GET", "POST", "PATCH", "DELETE", "OPTIONS"],
     allow_headers=["Authorization", "Content-Type"],
 )
+
+
+class SecurityHeadersMiddleware(BaseHTTPMiddleware):
+    async def dispatch(self, request, call_next):
+        response = await call_next(request)
+        response.headers.setdefault("X-Content-Type-Options", "nosniff")
+        response.headers.setdefault("X-Frame-Options", "DENY")
+        response.headers.setdefault("Referrer-Policy", "strict-origin-when-cross-origin")
+        return response
+
+
+app.add_middleware(SecurityHeadersMiddleware)
 
 
 class ChatRequest(BaseModel):
@@ -92,7 +128,8 @@ def current_user(authorization: str | None = Header(default=None)):
 
 
 @app.post("/api/v1/auth/register")
-def register(request: RegisterRequest):
+def register(request: RegisterRequest, raw_request: Request):
+    _check_auth_rate_limit("register:" + _client_key(raw_request))
     try:
         user = create_user(request.name, request.email, request.password)
     except ValueError as exc:
@@ -101,7 +138,9 @@ def register(request: RegisterRequest):
 
 
 @app.post("/api/v1/auth/login")
-def login(request: LoginRequest):
+def login(request: LoginRequest, raw_request: Request):
+    email_key = request.email.strip().lower()
+    _check_auth_rate_limit("login:" + _client_key(raw_request) + ":" + email_key)
     user = authenticate(request.email, request.password)
     if not user:
         raise HTTPException(status_code=401, detail="Invalid email or password.")
@@ -192,7 +231,7 @@ def chat(request: ChatRequest, user=Depends(current_user)):
                 attachment_urls.append(image_data_url(path, user_id=user["id"]))
             except ValueError:
                 try:
-                    candidate = _safe_path(path, user["id"])
+                    candidate = ensure_local_file(path, user["id"])
                     if not is_supported_document(candidate):
                         raise ValueError("unsupported attachment type")
                     user_root = (FILE_ROOT / f"user_{user['id']}").resolve()
@@ -209,6 +248,8 @@ def chat(request: ChatRequest, user=Depends(current_user)):
             rag_sources=rag_sources or None,
             verbose=False,
         )
+    except HTTPException:
+        raise
     except Exception as exc:
         raise HTTPException(status_code=500, detail="Agent execution failed.") from exc
 
@@ -233,7 +274,7 @@ def chat_stream(request: ChatRequest, user=Depends(current_user)):
             attachment_urls.append(image_data_url(path, user_id=user["id"]))
         except ValueError:
             try:
-                candidate = _safe_path(path, user["id"])
+                candidate = ensure_local_file(path, user["id"])
                 if not is_supported_document(candidate):
                     raise ValueError("unsupported attachment type")
                 user_root = (FILE_ROOT / f"user_{user['id']}").resolve()
@@ -368,7 +409,23 @@ def get_chat(session_id: str, user=Depends(current_user)):
 @app.post("/api/v1/memories", response_model=MemoryResponse)
 def create_memory(request: MemoryRequest, user=Depends(current_user)):
     remember_fact(request.fact, source=request.source, user_id=user["id"])
+    try:
+        remember_semantic(request.fact, source=request.source, user_id=user["id"])
+    except Exception as exc:
+        logger.warning("Semantic memory indexing failed: %s", exc)
     return MemoryResponse(saved=True, fact=request.fact)
+
+
+@app.delete("/api/v1/memories")
+def delete_memory(fact: str, user=Depends(current_user)):
+    if not fact.strip():
+        raise HTTPException(status_code=400, detail="Fact cannot be empty.")
+    exact = fact.strip()
+    deleted_exact = delete_semantic_memory(exact, user_id=user["id"])
+    with connect(DB_PATH) as con:
+        cur = con.execute("DELETE FROM memories WHERE user_id=? AND fact=?", (user["id"], exact))
+        deleted = cur.rowcount > 0 or deleted_exact
+    return {"deleted": deleted, "fact": exact}
 
 
 @app.get("/api/v1/memories")
@@ -517,6 +574,7 @@ def delete_file(path: str, user=Depends(current_user)):
         if not candidate.is_file():
             raise FileNotFoundError(path)
         candidate.unlink()
-        return {"deleted": True, "path": path}
+        deleted_chunks = delete_rag_source(path, user_id=user["id"])
+        return {"deleted": True, "path": path, "rag_chunks_deleted": deleted_chunks}
     except (FileNotFoundError, PermissionError) as exc:
         raise HTTPException(status_code=404, detail="File not found.") from exc

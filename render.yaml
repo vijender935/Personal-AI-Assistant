@@ -18,6 +18,18 @@ services:
         sync: false
       - key: MCP_SERVERS
         sync: false
+      - key: DATABASE_URL
+        fromDatabase:
+          name: personal-ai-assistant-db
+          property: connectionString
+      - key: R2_ENDPOINT
+        sync: false
+      - key: R2_BUCKET
+        sync: false
+      - key: R2_ACCESS_KEY_ID
+        sync: false
+      - key: R2_SECRET_ACCESS_KEY
+        sync: false
 
   - type: web
     name: personal-ai-assistant-frontend
@@ -28,3 +40,9 @@ services:
     envVars:
       - key: VITE_API_URL
         sync: false
+
+databases:
+  - name: personal-ai-assistant-db
+    databaseName: personal_ai_assistant
+    region: singapore
+    plan: free

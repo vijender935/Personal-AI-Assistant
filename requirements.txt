@@ -12,3 +12,4 @@ python-multipart
 pymupdf
 python-docx
 psycopg[binary]
+boto3

@@ -5,6 +5,8 @@ import json
 import os
 from dataclasses import dataclass
 
+from connectors import validate_connector_url
+
 
 @dataclass(frozen=True)
 class MCPServerConfig:
@@ -57,7 +59,14 @@ def _env_server_configs() -> list[MCPServerConfig]:
                 args=tuple(item.get("args", [])),
             ))
         elif transport in {"streamable-http", "sse"}:
-            configs.append(MCPServerConfig(**common, url=item.get("url")))
+            url = item.get("url")
+            if not isinstance(url, str):
+                continue
+            try:
+                url = validate_connector_url(url, resolve_dns=False)
+            except ValueError:
+                continue
+            configs.append(MCPServerConfig(**common, url=url))
     return configs
 
 
