@@ -4,7 +4,7 @@ import json,logging,os,sys,time
 from typing import Optional
 from groq import Groq
 from config import MAX_HISTORY_MESSAGES,MAX_ITERATIONS,MAX_RETRIES,MODEL,VISION_MODEL
-from orchestration import build_execution_plan, plan_prompt, plan_task, recovery_instruction, validate_tool_result
+from orchestration import ExecutionState, build_execution_plan, plan_prompt, plan_task, recovery_instruction, should_continue_execution, validate_tool_result
 from tools import TOOL_FUNCTIONS,TOOL_SCHEMAS,init_db,load_history,semantic_recall_memories,remember_fact,save_turn
 logger=logging.getLogger(__name__)
 logging.basicConfig(level=os.getenv("LOG_LEVEL","INFO").upper(),format="%(asctime)s | %(levelname)s | %(name)s | %(message)s")
@@ -56,7 +56,9 @@ def run_agent(goal,session_id="default",user_id=0,image_urls=None,rag_sources=No
     tool_schemas=TOOL_SCHEMAS+mcp_schemas
     if image_urls:
         messages[-1]["content"]=[{"type":"text","text":goal}]+[{"type":"image_url","image_url":{"url":url}} for url in image_urls]
-    for _ in range(min(MAX_ITERATIONS, execution_plan.max_tool_rounds)):
+    state = ExecutionState()
+    while should_continue_execution(state, min(MAX_ITERATIONS, execution_plan.max_tool_rounds)):
+        state.round_number += 1
         response=None
         for retry in range(MAX_RETRIES+1):
             try:
@@ -70,6 +72,8 @@ def run_agent(goal,session_id="default",user_id=0,image_urls=None,rag_sources=No
             answer=msg.content or "";save_turn(session_id,goal,answer,user_id=user_id);return answer
         for call in msg.tool_calls:
             name=call.function.name
+            state.tool_calls += 1
+            state.last_tool = name
             try:args=json.loads(call.function.arguments or "{}")
             except json.JSONDecodeError:args={}
             if verbose:logger.info("Tool call: %s(%s)",name,args)
@@ -92,11 +96,16 @@ def run_agent(goal,session_id="default",user_id=0,image_urls=None,rag_sources=No
                 "name": name,
                 "content": validated.content,
             })
+            if validated.ok:
+                state.consecutive_failures = 0
             if not validated.ok:
+                state.consecutive_failures += 1
                 messages.append({
                     "role": "system",
                     "content": recovery_instruction(name, validated),
                 })
+    if state.consecutive_failures >= 2:
+        return "⚠️ Tool execution repeatedly failed. Maine unsafe/infinite retry se bachne ke liye execution stop kar diya."
     return f"⚠️ Max tool iterations ({MAX_ITERATIONS}) reached — task incomplete reh gaya."
 def stream_agent(goal,session_id="default",user_id=0,image_urls=None,rag_sources=None):
     """Yield assistant text chunks using Groq streaming.
