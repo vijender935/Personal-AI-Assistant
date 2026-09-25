@@ -67,6 +67,50 @@ def run_agent(goal,session_id="default",user_id=0,image_urls=None,rag_sources=No
             except Exception as exc:logger.exception("Tool failed: %s",name);result=f"Tool error in {name}: {exc}"
             messages.append({"role":"tool","tool_call_id":call.id,"name":name,"content":str(result)})
     return f"⚠️ Max tool iterations ({MAX_ITERATIONS}) reached — task incomplete reh gaya."
+def stream_agent(goal,session_id="default",user_id=0,image_urls=None,rag_sources=None):
+    """Yield assistant text chunks using Groq streaming.
+
+    Tool execution remains available through the normal /chat endpoint. Streaming
+    is intentionally used for direct model responses so tool-call semantics stay
+    deterministic.
+    """
+    goal=goal.strip()
+    if not goal:
+        yield "Please enter a message."
+        return
+    api_key=os.getenv("GROQ_API_KEY")
+    if not api_key:
+        yield "❌ GROQ_API_KEY set nahi hai."
+        return
+    messages=build_messages(goal,session_id,user_id=user_id,rag_sources=rag_sources)
+    if image_urls:
+        messages[-1]["content"]=[{"type":"text","text":goal}]+[
+            {"type":"image_url","image_url":{"url":url}} for url in image_urls
+        ]
+    client=Groq(api_key=api_key)
+    try:
+        stream=client.chat.completions.create(
+            model=VISION_MODEL if image_urls else MODEL,
+            messages=messages,
+            tools=TOOL_SCHEMAS,
+            tool_choice="none",
+            temperature=0.4,
+            stream=True,
+        )
+        parts=[]
+        for chunk in stream:
+            delta=chunk.choices[0].delta.content if chunk.choices else None
+            if delta:
+                parts.append(delta)
+                yield delta
+        answer="".join(parts)
+        if answer:
+            save_turn(session_id,goal,answer,user_id=user_id)
+    except Exception as exc:
+        logger.exception("Streaming model request failed")
+        yield f"❌ Streaming request failed: {exc}"
+
+
 def interactive():
     session_id=os.getenv("AGENT_SESSION","default");print(f"Personal AI Agent — model: {MODEL}");print("Commands: /new, /remember <fact>, /memories, /exit\n")
     while True:
