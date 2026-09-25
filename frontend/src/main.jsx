@@ -15,7 +15,7 @@ function App(){
  const chat=chats.find(c=>c.id===active)||chats[0];
 
  useEffect(()=>{if(!token)return;fetch(API+"/api/v1/auth/me",{headers:{Authorization:"Bearer "+token}}).then(async r=>{if(r.ok)setUser((await r.json()).user);else{localStorage.removeItem("personal_ai_token");setUser(null)}}).catch(()=>{});},[token]);
- useEffect(()=>{if(!token||!user)return;fetch(API+"/api/v1/chats",{headers:{Authorization:"Bearer "+token}}).then(async r=>{if(!r.ok)return;const d=await r.json();if(d.chats?.length){setChats(d.chats);setActive(d.chats[0].session_id)}}).catch(()=>{});},[token,user]);
+ useEffect(()=>{if(!token||!user)return;fetch(API+"/api/v1/chats",{headers:{Authorization:"Bearer "+token}}).then(async r=>{if(!r.ok)return;const d=await r.json();if(d.chats?.length){const normalized=d.chats.map(c=>({...c,id:c.session_id}));setChats(normalized);setActive(normalized[0].id)}}).catch(()=>{});},[token,user]);
 
  async function loadFiles(){if(!token)return;const r=await fetch(API+"/api/v1/files",{headers:{Authorization:"Bearer "+token}});if(r.ok)setFiles((await r.json()).files||[]);}
  useEffect(()=>{if(user)loadFiles()},[user]);
