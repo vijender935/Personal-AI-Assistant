@@ -40,6 +40,21 @@ def load_history(session_id,limit=30,user_id=0):
         rows=con.execute("SELECT role,content FROM messages WHERE session_id=? AND user_id=? ORDER BY id DESC LIMIT ?",(session_id,user_id,limit)).fetchall()
     return [{"role":r,"content":c} for r,c in reversed(rows)]
 
+def list_sessions(user_id=0, limit=50):
+    limit=max(1,min(int(limit),100))
+    with sqlite3.connect(DB_PATH) as con:
+        rows=con.execute(
+            """SELECT session_id, MAX(id) AS last_id
+               FROM messages
+               WHERE user_id=?
+               GROUP BY session_id
+               ORDER BY last_id DESC
+               LIMIT ?""",
+            (user_id,limit),
+        ).fetchall()
+    return [session_id for session_id,_ in rows]
+
+
 def remember_fact(fact,source="user",user_id=0):
     fact=fact.strip()
     if not fact:return
