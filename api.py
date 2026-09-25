@@ -12,7 +12,7 @@ from pydantic import BaseModel, Field
 from agent import MODEL, VISION_MODEL, run_agent
 from config import ALLOW_SHELL, FILE_ROOT, ensure_directories
 from tools import init_db, recall_memories, remember_fact
-from memory import index_document, index_file, search_rag
+from memory import index_document, search_rag
 from auth import authenticate, create_session, create_user, get_user, init_auth_db, revoke_session
 from multimodal import save_upload, read_upload, image_data_url, _safe_path
 from mcp_registry import registry_snapshot
@@ -24,7 +24,7 @@ init_auth_db()
 
 app = FastAPI(
     title="Personal AI Assistant API",
-    version="0.9.0",
+    version="0.10.0",
     description="REST API for the Personal AI Assistant agent engine.",
 )
 
@@ -127,7 +127,7 @@ def health():
 def info():
     return {
         "name": "Personal AI Assistant",
-        "version": "0.9.0",
+        "version": "0.10.0",
         "model": MODEL,
         "shell_enabled": ALLOW_SHELL,
     }
@@ -189,7 +189,7 @@ def list_memories(limit: int = 50, user=Depends(current_user)):
 
 
 @app.get("/api/v1/memories/search")
-def search_memories(q: str, limit: int = 8):
+def search_memories(q: str, limit: int = 8, user=Depends(current_user)):
     if not q.strip():
         raise HTTPException(status_code=400, detail="Query cannot be empty.")
     limit = max(1, min(limit, 50))
@@ -213,7 +213,7 @@ def create_rag_document(request: RAGDocumentRequest, user=Depends(current_user))
 @app.post("/api/v1/rag/files")
 def create_rag_file(path: str, user=Depends(current_user)):
     try:
-        added = index_file(path, user_id=user["id"])
+        candidate = _safe_path(path, user["id"])\n        if not is_supported_document(candidate):\n            raise ValueError("Unsupported document type.")\n        document_text = extract_and_limit(candidate)\n        user_root = (FILE_ROOT / f"user_{user["id"]}").resolve()\n        source = str(candidate.relative_to(user_root))\n        added = index_document(source, document_text, user_id=user["id"], replace_source=True)
     except FileNotFoundError:
         raise HTTPException(status_code=404, detail="File not found.")
     except PermissionError as exc:
@@ -271,7 +271,7 @@ def mcp_servers(user=Depends(current_user)):
 def api_root():
     return {
         "service": "Personal AI Assistant API",
-        "version": "0.7.0",
+        "version": "0.10.0",
         "endpoints": [
             "GET /health",
             "GET /api/v1/info",
