@@ -127,6 +127,30 @@ def recovery_instruction(tool_name: str, result: ToolResult) -> str:
     )
 
 
+def select_mcp_tools(
+    schemas: list[dict],
+    goal: str,
+    max_tools: int = 12,
+) -> list[dict]:
+    """Select a bounded MCP tool subset using deterministic lexical relevance."""
+    if max_tools < 1:
+        return []
+    terms = {word for word in goal.lower().split() if len(word) >= 3}
+    scored = []
+    for schema in schemas:
+        fn = schema.get("function", {})
+        name = str(fn.get("name", "")).lower()
+        description = str(fn.get("description", "")).lower()
+        haystack = f"{name} {description}"
+        score = sum(1 for term in terms if term in haystack)
+        scored.append((score, name, schema))
+    scored.sort(key=lambda item: (-item[0], item[1]))
+    relevant = [item[2] for item in scored if item[0] > 0]
+    if relevant:
+        return relevant[:max_tools]
+    return [item[2] for item in scored[:max_tools]]
+
+
 def build_execution_plan(plan: TaskPlan) -> ExecutionPlan:
     steps = ["understand_request"]
     if plan.needs_memory:
