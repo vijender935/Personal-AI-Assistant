@@ -32,7 +32,7 @@ def test_mcp_discovery_cache(monkeypatch):
         schemas=[{"type": "function", "function": {"name": "mcp__demo__ping"}}],
     )
     monkeypatch.setenv("MCP_SERVERS", '{"demo":{"transport":"streamable-http","url":"https://example/mcp"}}')
-    monkeypatch.setattr(mcp_client, "_discover_async", lambda: (_ for _ in ()).throw(AssertionError("cache miss")))
+    monkeypatch.setattr(mcp_client, "_discover_async", lambda user_id=0: (_ for _ in ()).throw(AssertionError("cache miss")))
     assert mcp_client.discover_tool_schemas()[0]["function"]["name"] == "mcp__demo__ping"
 
 
