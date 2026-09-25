@@ -192,7 +192,7 @@ def chat(request: ChatRequest, user=Depends(current_user)):
                 attachment_urls.append(image_data_url(path, user_id=user["id"]))
             except ValueError:
                 try:
-                    candidate = _safe_path(path, user["id"])
+                    candidate = ensure_local_file(path, user["id"])
                     if not is_supported_document(candidate):
                         raise ValueError("unsupported attachment type")
                     user_root = (FILE_ROOT / f"user_{user['id']}").resolve()
