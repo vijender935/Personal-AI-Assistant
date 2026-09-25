@@ -48,3 +48,12 @@ def test_embedding_version_is_persisted(monkeypatch,tmp_path):
     with __import__("sqlite3").connect(memory.DB_PATH) as con:
         version=con.execute("SELECT embedding_version FROM rag_documents").fetchone()[0]
     assert version==memory.EMBEDDING_VERSION
+
+
+def test_rag_source_status(monkeypatch, tmp_path):
+    _setup(monkeypatch, tmp_path)
+    memory.index_document("report.txt", "one two", user_id=1)
+    memory.index_document("other.txt", "three four", user_id=1)
+    status = memory.rag_source_status(user_id=1)
+    assert {item["source"] for item in status} == {"report.txt", "other.txt"}
+    assert all(item["chunks"] >= 1 for item in status)
