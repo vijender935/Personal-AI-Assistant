@@ -120,7 +120,8 @@ def current_user(authorization: str | None = Header(default=None)):
 
 
 @app.post("/api/v1/auth/register")
-def register(request: RegisterRequest):
+def register(request: RegisterRequest, raw_request: Request):
+    _check_auth_rate_limit("register:" + _client_key(raw_request))
     try:
         user = create_user(request.name, request.email, request.password)
     except ValueError as exc:
@@ -129,7 +130,9 @@ def register(request: RegisterRequest):
 
 
 @app.post("/api/v1/auth/login")
-def login(request: LoginRequest):
+def login(request: LoginRequest, raw_request: Request):
+    email_key = request.email.strip().lower()
+    _check_auth_rate_limit("login:" + _client_key(raw_request) + ":" + email_key)
     user = authenticate(request.email, request.password)
     if not user:
         raise HTTPException(status_code=401, detail="Invalid email or password.")
