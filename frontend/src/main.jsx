@@ -80,8 +80,8 @@ function App(){
        if(type==="error"){throw new Error(p.detail||"Streaming failed.")}
        if(p.text){answer+=p.text;update([...next.slice(0,-1),{role:"user",content:message},{role:"assistant",content:answer}])}
      }catch(e){
-       if(e.message!=="Streaming failed.")throw e;
-       update([...next.slice(0,-1),{role:"user",content:message},{role:"assistant",content:e.message}]);
+       update([...next.slice(0,-1),{role:"user",content:message},{role:"assistant",content:e.message||"Streaming failed."}]);
+       return;
      }
     }}
   }catch(e){if(e.name!=="AbortError")update([...next.slice(0,-1),{role:"user",content:message},{role:"assistant",content:"Backend se connection nahi ho paaya."}])}
