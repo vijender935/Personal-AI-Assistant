@@ -11,7 +11,7 @@ from pydantic import BaseModel, Field
 
 from agent import MODEL, VISION_MODEL, run_agent
 from config import ALLOW_SHELL, FILE_ROOT, ensure_directories
-from tools import init_db, recall_memories, remember_fact
+from tools import init_db, recall_memories, remember_fact, load_history, list_sessions
 from memory import index_document, search_rag
 from auth import authenticate, create_session, create_user, get_user, init_auth_db, revoke_session
 from multimodal import save_upload, read_upload, image_data_url, _safe_path
@@ -174,6 +174,35 @@ def chat(request: ChatRequest, user=Depends(current_user)):
         session_id=request.session_id,
         model=VISION_MODEL if attachment_urls else MODEL,
     )
+
+
+@app.get("/api/v1/chats")
+def list_chats(limit: int = 50, user=Depends(current_user)):
+    limit = max(1, min(limit, 100))
+    sessions = list_sessions(user_id=user["id"], limit=limit)
+    chats = []
+    prefix = f"user-{user['id']}-"
+    for session in sessions:
+        public_id = session[len(prefix):] if session.startswith(prefix) else session
+        history = load_history(session, limit=4, user_id=user["id"])
+        title = next((m["content"] for m in history if m["role"] == "user"), "New conversation")
+        chats.append({
+            "session_id": public_id,
+            "title": title[:80],
+            "messages": history,
+        })
+    return {"chats": chats}
+
+
+@app.get("/api/v1/chats/{session_id}")
+def get_chat(session_id: str, user=Depends(current_user)):
+    if not session_id or len(session_id) > 200:
+        raise HTTPException(status_code=400, detail="Invalid session id.")
+    internal_id = f"user-{user['id']}-{session_id}"
+    return {
+        "session_id": session_id,
+        "messages": load_history(internal_id, limit=100, user_id=user["id"]),
+    }
 
 
 @app.post("/api/v1/memories", response_model=MemoryResponse)
