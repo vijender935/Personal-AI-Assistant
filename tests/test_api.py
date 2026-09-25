@@ -49,7 +49,7 @@ def test_chat_without_api_key(monkeypatch):
         "/api/v1/chat",
         json={"message": "Hello", "session_id": "test"},
     )
-    assert response.status_code == 503
+    assert response.status_code == 401
 
 
 def _register_user():
