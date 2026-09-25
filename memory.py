@@ -3,6 +3,7 @@ from __future__ import annotations
 import hashlib,sqlite3
 from typing import Iterable
 from config import DB_PATH,FILE_ROOT,ensure_directories
+from db import connect,using_postgres
 from multimodal import _safe_path
 MODEL_NAME="BAAI/bge-small-en-v1.5";MAX_CHUNK_CHARS=1800;CHUNK_OVERLAP=250
 EMBEDDING_VERSION="fastembed-bge-small-en-v1.5"
@@ -24,13 +25,23 @@ def _vector(blob):
     import numpy as np
     return np.frombuffer(blob,dtype=np.float32)
 def _ensure_column(con,table,column,definition):
-    cols={row[1] for row in con.execute(f"PRAGMA table_info({table})")}
-    if column not in cols:con.execute(f"ALTER TABLE {table} ADD COLUMN {column} {definition}")
+    if using_postgres():
+        exists=con.execute("SELECT 1 FROM information_schema.columns WHERE table_schema='public' AND table_name=? AND column_name=?",(table,column)).fetchone()
+        if not exists: con.execute(f"ALTER TABLE {table} ADD COLUMN {column} {definition}")
+    else:
+        cols={row[1] for row in con.execute(f"PRAGMA table_info({table})")}
+        if column not in cols: con.execute(f"ALTER TABLE {table} ADD COLUMN {column} {definition}")
 def init_semantic_store():
     ensure_directories()
-    with sqlite3.connect(DB_PATH) as con:
-        con.execute("""CREATE TABLE IF NOT EXISTS semantic_memories(id INTEGER PRIMARY KEY AUTOINCREMENT,fact TEXT NOT NULL UNIQUE,source TEXT,user_id INTEGER NOT NULL DEFAULT 0,embedding BLOB NOT NULL,created_at DATETIME DEFAULT CURRENT_TIMESTAMP)""")
-        con.execute("""CREATE TABLE IF NOT EXISTS rag_documents(id INTEGER PRIMARY KEY AUTOINCREMENT,source TEXT NOT NULL,chunk_index INTEGER NOT NULL,content TEXT NOT NULL,content_hash TEXT NOT NULL UNIQUE,user_id INTEGER NOT NULL DEFAULT 0,embedding BLOB NOT NULL,created_at DATETIME DEFAULT CURRENT_TIMESTAMP)""")
+    with connect(DB_PATH) as con:
+        if using_postgres():
+            con.execute("""CREATE TABLE IF NOT EXISTS semantic_memories(id BIGSERIAL PRIMARY KEY,fact TEXT NOT NULL,source TEXT,user_id BIGINT NOT NULL DEFAULT 0,embedding BYTEA NOT NULL,created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP)""")
+            con.execute("""CREATE TABLE IF NOT EXISTS rag_documents(id BIGSERIAL PRIMARY KEY,source TEXT NOT NULL,chunk_index INTEGER NOT NULL,content TEXT NOT NULL,content_hash TEXT NOT NULL,user_id BIGINT NOT NULL DEFAULT 0,embedding BYTEA NOT NULL,created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP)""")
+            con.execute("CREATE UNIQUE INDEX IF NOT EXISTS uq_semantic_user_fact ON semantic_memories(user_id,fact)")
+            con.execute("CREATE UNIQUE INDEX IF NOT EXISTS uq_rag_content_hash ON rag_documents(content_hash)")
+        else:
+            con.execute("""CREATE TABLE IF NOT EXISTS semantic_memories(id INTEGER PRIMARY KEY AUTOINCREMENT,fact TEXT NOT NULL UNIQUE,source TEXT,user_id INTEGER NOT NULL DEFAULT 0,embedding BLOB NOT NULL,created_at DATETIME DEFAULT CURRENT_TIMESTAMP)""")
+            con.execute("""CREATE TABLE IF NOT EXISTS rag_documents(id INTEGER PRIMARY KEY AUTOINCREMENT,source TEXT NOT NULL,chunk_index INTEGER NOT NULL,content TEXT NOT NULL,content_hash TEXT NOT NULL UNIQUE,user_id INTEGER NOT NULL DEFAULT 0,embedding BLOB NOT NULL,created_at DATETIME DEFAULT CURRENT_TIMESTAMP)""")
         _ensure_column(con,"semantic_memories","user_id","INTEGER NOT NULL DEFAULT 0")
         _ensure_column(con,"rag_documents","user_id","INTEGER NOT NULL DEFAULT 0")
         _ensure_column(con,"semantic_memories","embedding_version","TEXT NOT NULL DEFAULT 'legacy'")
@@ -41,15 +52,15 @@ def remember_semantic(fact,source="user",user_id=0):
     fact=fact.strip()
     if not fact:return False
     init_semantic_store()
-    with sqlite3.connect(DB_PATH) as con:
+    with connect(DB_PATH) as con:
         try:con.execute("INSERT INTO semantic_memories(fact,source,user_id,embedding,embedding_version) VALUES(?,?,?,?,?)",(fact,source,user_id,_embedding(fact),EMBEDDING_VERSION))
-        except sqlite3.IntegrityError:pass
+        except Exception:pass
     return True
 def search_semantic_memories(query,limit=8,user_id=0):
     query=query.strip()
     if not query:return []
     init_semantic_store();q=_vector(_embedding(query,"query"))
-    with sqlite3.connect(DB_PATH) as con:rows=con.execute("SELECT fact,embedding FROM semantic_memories WHERE user_id=? AND embedding_version=?",(user_id,EMBEDDING_VERSION)).fetchall()
+    with connect(DB_PATH) as con:rows=con.execute("SELECT fact,embedding FROM semantic_memories WHERE user_id=? AND embedding_version=?",(user_id,EMBEDDING_VERSION)).fetchall()
     scored=[]
     for fact,blob in rows:
         v=_vector(blob)
@@ -68,11 +79,11 @@ def index_document(source,content,user_id=0,replace_source=False):
     if not source or not content:return 0
     init_semantic_store()
     if replace_source:
-        with sqlite3.connect(DB_PATH) as con: con.execute("DELETE FROM rag_documents WHERE user_id=? AND source=?",(user_id,source))
+        with connect(DB_PATH) as con: con.execute("DELETE FROM rag_documents WHERE user_id=? AND source=?",(user_id,source))
     added=0
     for index,chunk in enumerate(_chunks(content)):
         digest=hashlib.sha256(f"{user_id}\n{source}\n{index}\n{chunk}".encode()).hexdigest()
-        with sqlite3.connect(DB_PATH) as con:
+        with connect(DB_PATH) as con:
             if con.execute("SELECT 1 FROM rag_documents WHERE content_hash=? AND user_id=?",(digest,user_id)).fetchone():continue
             con.execute("INSERT INTO rag_documents(source,chunk_index,content,content_hash,user_id,embedding,embedding_version) VALUES(?,?,?,?,?,?,?)",(source,index,chunk,digest,user_id,_embedding(chunk),EMBEDDING_VERSION))
         added+=1
@@ -87,7 +98,7 @@ def search_rag(query,limit=5,user_id=0,sources=None):
     query=query.strip()
     if not query:return []
     init_semantic_store();q=_vector(_embedding(query,"query"))
-    with sqlite3.connect(DB_PATH) as con:
+    with connect(DB_PATH) as con:
         if sources:
             placeholders=",".join("?" for _ in sources)
             rows=con.execute(f"SELECT source,chunk_index,content,embedding FROM rag_documents WHERE user_id=? AND embedding_version=? AND source IN ({placeholders})",(user_id,EMBEDDING_VERSION,*sources)).fetchall()
@@ -110,7 +121,7 @@ def search_rag(query,limit=5,user_id=0,sources=None):
 def rag_source_status(user_id=0):
     """Return per-source RAG indexing status for an authenticated user."""
     init_semantic_store()
-    with sqlite3.connect(DB_PATH) as con:
+    with connect(DB_PATH) as con:
         rows=con.execute(
             """SELECT source, COUNT(*) AS chunks, MAX(created_at) AS indexed_at
                FROM rag_documents
