@@ -81,3 +81,29 @@ def test_execution_state_failure_guard():
     state.consecutive_failures = 0
     state.round_number = 4
     assert not should_continue_execution(state, 4)
+
+
+
+def test_select_mcp_tools_prefers_relevant_tools():
+    from orchestration import select_mcp_tools
+
+    schemas = [
+        {"type": "function", "function": {"name": "mcp__github__list_issues", "description": "List repository issues"}},
+        {"type": "function", "function": {"name": "mcp__github__create_issue", "description": "Create a repository issue"}},
+        {"type": "function", "function": {"name": "mcp__github__list_releases", "description": "List releases"}},
+    ]
+    selected = select_mcp_tools(schemas, "check repository issues", max_tools=2)
+    names = [item["function"]["name"] for item in selected]
+    assert "mcp__github__list_issues" in names
+    assert "mcp__github__create_issue" in names
+    assert len(selected) == 2
+
+
+def test_select_mcp_tools_is_bounded():
+    from orchestration import select_mcp_tools
+
+    schemas = [
+        {"type": "function", "function": {"name": f"mcp__server__tool_{i}", "description": "generic"}}
+        for i in range(20)
+    ]
+    assert len(select_mcp_tools(schemas, "do something", max_tools=5)) == 5
