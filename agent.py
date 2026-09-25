@@ -4,6 +4,7 @@ import json,logging,os,sys,time
 from typing import Optional
 from groq import Groq
 from config import MAX_HISTORY_MESSAGES,MAX_ITERATIONS,MAX_RETRIES,MODEL,VISION_MODEL
+from orchestration import plan_prompt, plan_task
 from tools import TOOL_FUNCTIONS,TOOL_SCHEMAS,init_db,load_history,semantic_recall_memories,remember_fact,save_turn
 logger=logging.getLogger(__name__)
 logging.basicConfig(level=os.getenv("LOG_LEVEL","INFO").upper(),format="%(asctime)s | %(levelname)s | %(name)s | %(message)s")
@@ -20,7 +21,8 @@ def _extract_memory_candidate(text):
     return None
 def build_messages(goal,session_id,user_id=0,rag_sources=None):
     history=load_history(session_id,MAX_HISTORY_MESSAGES,user_id=user_id);memories=semantic_recall_memories(goal,limit=8,user_id=user_id)
-    messages=[{"role":"system","content":SYSTEM_PROMPT}]
+    plan = plan_task(goal)
+    messages=[{"role":"system","content":SYSTEM_PROMPT}, {"role":"system","content":plan_prompt(plan)}]
     if memories:messages.append({"role":"system","content":"Relevant saved memories (semantic retrieval):\n"+"\n".join(f"- {m}" for m in memories)})
     try:
         from memory import search_rag
