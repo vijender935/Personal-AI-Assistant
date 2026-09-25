@@ -19,6 +19,7 @@ from memory import index_document, search_rag, rag_source_status
 from auth import authenticate, create_session, create_user, get_user, init_auth_db, revoke_session
 from multimodal import save_upload, read_upload, image_data_url, _safe_path
 from mcp_registry import registry_snapshot
+from connectors import init_connectors_db, list_connectors, upsert_connector, delete_connector
 from document_parser import extract_and_limit, is_supported_document
 
 logger = logging.getLogger(__name__)
@@ -26,6 +27,7 @@ logger = logging.getLogger(__name__)
 ensure_directories()
 init_db()
 init_auth_db()
+init_connectors_db()
 
 app = FastAPI(
     title="Personal AI Assistant API",
@@ -136,6 +138,45 @@ def info():
         "model": MODEL,
         "shell_enabled": ALLOW_SHELL,
     }
+
+
+class MCPConnectorRequest(BaseModel):
+    name: str = Field(..., min_length=1, max_length=80)
+    transport: str = Field(default="streamable-http")
+    url: str = Field(..., min_length=8, max_length=2000)
+    allowed_tools: list[str] = Field(default_factory=list, max_length=100)
+
+
+@app.get("/api/v1/mcp/connectors")
+def get_mcp_connectors(user=Depends(current_user)):
+    return {"connectors": list_connectors(user["id"])}
+
+
+@app.post("/api/v1/mcp/connectors")
+def add_mcp_connector(request: MCPConnectorRequest, user=Depends(current_user)):
+    try:
+        connector = upsert_connector(
+            user["id"],
+            request.name,
+            request.transport,
+            request.url,
+            request.allowed_tools,
+        )
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+    return {"connector": connector}
+
+
+@app.delete("/api/v1/mcp/connectors/{connector_id}")
+def remove_mcp_connector(connector_id: int, user=Depends(current_user)):
+    if not delete_connector(user["id"], connector_id):
+        raise HTTPException(status_code=404, detail="Connector not found.")
+    return {"deleted": True, "id": connector_id}
+
+
+@app.get("/api/v1/mcp/servers")
+def get_mcp_servers(user=Depends(current_user)):
+    return {"servers": registry_snapshot(user["id"])}
 
 
 @app.post("/api/v1/chat", response_model=ChatResponse)
