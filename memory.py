@@ -55,10 +55,13 @@ def _chunks(text)->Iterable[str]:
         if chunk:yield chunk
         if end>=len(text):break
         start=max(start+1,end-CHUNK_OVERLAP)
-def index_document(source,content,user_id=0):
+def index_document(source,content,user_id=0,replace_source=False):
     source,content=source.strip(),content.strip()
     if not source or not content:return 0
-    init_semantic_store();added=0
+    init_semantic_store()
+    if replace_source:
+        with sqlite3.connect(DB_PATH) as con: con.execute("DELETE FROM rag_documents WHERE user_id=? AND source=?",(user_id,source))
+    added=0
     for index,chunk in enumerate(_chunks(content)):
         digest=hashlib.sha256(f"{user_id}\n{source}\n{index}\n{chunk}".encode()).hexdigest()
         with sqlite3.connect(DB_PATH) as con:
@@ -66,17 +69,22 @@ def index_document(source,content,user_id=0):
             con.execute("INSERT INTO rag_documents(source,chunk_index,content,content_hash,user_id,embedding) VALUES(?,?,?,?,?,?)",(source,index,chunk,digest,user_id,_embedding(chunk)))
         added+=1
     return added
-def index_file(path,user_id=0):
+def index_file(path,user_id=0,replace_source=False)
     candidate=(FILE_ROOT/path).resolve()
     try:candidate.relative_to(FILE_ROOT.resolve())
     except ValueError as exc:raise PermissionError(f"path is outside the allowed file root: {FILE_ROOT}") from exc
     if not candidate.is_file():raise FileNotFoundError(path)
     return index_document(str(candidate.relative_to(FILE_ROOT)),candidate.read_text(encoding="utf-8",errors="replace"),user_id=user_id)
-def search_rag(query,limit=5,user_id=0):
+def search_rag(query,limit=5,user_id=0,sources=None)
     query=query.strip()
     if not query:return []
     init_semantic_store();q=_vector(_embedding(query))
-    with sqlite3.connect(DB_PATH) as con:rows=con.execute("SELECT source,chunk_index,content,embedding FROM rag_documents WHERE user_id=?",(user_id,)).fetchall()
+    with sqlite3.connect(DB_PATH) as con:
+        if sources:
+            placeholders=",".join("?" for _ in sources)
+            rows=con.execute(f"SELECT source,chunk_index,content,embedding FROM rag_documents WHERE user_id=? AND source IN ({placeholders})",(user_id,*sources)).fetchall()
+        else:
+            rows=con.execute("SELECT source,chunk_index,content,embedding FROM rag_documents WHERE user_id=?",(user_id,)).fetchall()
     scored=[]
     for source,chunk_index,content,blob in rows:
         v=_vector(blob)
