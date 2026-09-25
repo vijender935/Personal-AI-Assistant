@@ -62,3 +62,8 @@ def test_shell_runs_inside_user_root(tmp_path, monkeypatch):
     monkeypatch.setattr(tools, "ALLOWED_SHELL_COMMANDS", {"pwd"})
     result = tools.run_shell("pwd", user_id=9)
     assert "user_9" in result
+
+
+
+def test_basic_tools_accept_authenticated_context():
+    assert tools.calculator("6 * 7", user_id=12) == "42"
