@@ -34,7 +34,7 @@ services:
   - type: web
     name: personal-ai-assistant-frontend
     runtime: static
-    buildCommand: cd frontend && npm ci && npm run build
+    buildCommand: cd frontend && npm install && npm run build
     staticPublishPath: frontend/dist
     autoDeploy: true
     envVars:
