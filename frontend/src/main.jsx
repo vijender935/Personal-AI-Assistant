@@ -72,11 +72,8 @@ function App(){
    const r=await fetch(API+"/api/v1/chat/stream",{method:"POST",headers:{"Content-Type":"application/json",Authorization:"Bearer "+token},body:JSON.stringify({message,session_id:active,attachment_paths:attachments.map(a=>a.path)}),signal:controller.signal});
    if(!r.ok){const d=await r.json();update([...next.slice(0,-1),{role:"user",content:message},{role:"assistant",content:d.detail||"Request failed."}]);return}
    const reader=r.body.getReader(),decoder=new TextDecoder();let buffer="",answer="";
-   while(true){const {value,done}=await reader.read();if(done)break;buffer+=decoder.decode(value,{stream:true});const events=buffer.split("
-
-");buffer=events.pop()||"";for(const event of events){
-     const type=event.split("
-").find(x=>x.startsWith("event:"))?.slice(6).trim()||"delta";
+   while(true){const {value,done}=await reader.read();if(done)break;buffer+=decoder.decode(value,{stream:true});const events=buffer.split("\n\n");buffer=events.pop()||"";for(const event of events){
+     const type=event.split("\n").find(x=>x.startsWith("event:"))?.slice(6).trim()||"delta";
      const line=event.split("
 ").find(x=>x.startsWith("data: "));
      if(!line)continue;
