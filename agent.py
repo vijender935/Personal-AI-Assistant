@@ -50,7 +50,7 @@ def run_agent(goal,session_id="default",user_id=0,image_urls=None,rag_sources=No
     mcp_schemas=[]
     try:
         from mcp_client import discover_tool_schemas
-        mcp_schemas=select_mcp_tools(discover_tool_schemas(), goal, max_tools=12)
+        mcp_schemas=select_mcp_tools(discover_tool_schemas(user_id), goal, max_tools=12)
     except Exception as exc:
         logger.warning("MCP discovery unavailable: %s",exc)
     tool_schemas=TOOL_SCHEMAS+mcp_schemas
@@ -83,7 +83,7 @@ def run_agent(goal,session_id="default",user_id=0,image_urls=None,rag_sources=No
                     result=fn(**args, user_id=user_id)
                 elif name.startswith("mcp__"):
                     from mcp_client import call_tool
-                    result=call_tool(name,args)
+                    result=call_tool(name,args,user_id=user_id)
                 else:
                     result=f"Unknown tool: {name}"
             except Exception as exc:
