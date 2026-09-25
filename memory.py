@@ -94,10 +94,15 @@ def search_rag(query,limit=5,user_id=0,sources=None):
         else:
             rows=con.execute("SELECT source,chunk_index,content,embedding FROM rag_documents WHERE user_id=? AND embedding_version=?",(user_id,EMBEDDING_VERSION)).fetchall()
     scored=[]
+    query_terms={term.lower() for term in query.split() if len(term)>2}
     for source,chunk_index,content,blob in rows:
         v=_vector(blob)
-        if len(v)==len(q):scored.append((float(q@v),source,chunk_index,content))
-    scored = [item for item in scored if item[0] > 0]
+        if len(v)!=len(q):
+            continue
+        score=float(q@v)
+        lexical=any(term in content.lower() for term in query_terms)
+        if score > 0 or lexical:
+            scored.append((score,source,chunk_index,content))
     scored.sort(key=lambda x:x[0],reverse=True)
     return [{"score":round(score,4),"source":source,"chunk_index":chunk_index,"content":content} for score,source,chunk_index,content in scored[:max(1,min(limit,10))]]
 
