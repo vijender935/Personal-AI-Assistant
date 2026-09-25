@@ -1,12 +1,13 @@
-"""Lightweight deterministic task planner for agent orchestration.
-
-The planner does not call an LLM. It prepares execution hints so the agent can
-route a request through memory, RAG, web/local tools, and MCP without changing
-the user's request.
-"""
+"""Deterministic planning helpers for Personal AI Agent orchestration."""
 from __future__ import annotations
 
 from dataclasses import dataclass
+
+
+@dataclass(frozen=True)
+class ExecutionPlan:
+    steps: tuple[str, ...]
+    max_tool_rounds: int
 
 
 @dataclass(frozen=True)
@@ -48,10 +49,8 @@ def _contains(text: str, terms: set[str]) -> bool:
 
 def plan_task(goal: str) -> TaskPlan:
     text = goal.lower().strip()
-
     explicit_memory = text.startswith((
-        "remember ", "remember that ", "yaad rakho", "yaad rakhna",
-        "note that ",
+        "remember ", "remember that ", "yaad rakho", "yaad rakhna", "note that ",
     ))
     needs_memory = explicit_memory or _contains(text, _MEMORY_TERMS)
     needs_rag = _contains(text, _RAG_TERMS)
@@ -86,7 +85,30 @@ def plan_task(goal: str) -> TaskPlan:
     )
 
 
+def build_execution_plan(plan: TaskPlan) -> ExecutionPlan:
+    steps = ["understand_request"]
+    if plan.needs_memory:
+        steps.append("retrieve_memory")
+    if plan.needs_rag:
+        steps.append("retrieve_rag")
+    if plan.needs_web:
+        steps.append("web_or_current_information")
+    if plan.needs_local_tools:
+        steps.append("local_tool_execution")
+    if plan.needs_mcp:
+        steps.append("mcp_tool_execution")
+    steps.extend(["validate_tool_results", "compose_answer"])
+
+    max_tool_rounds = (
+        4 if plan.complexity == "complex"
+        else 2 if plan.complexity == "tool"
+        else 1
+    )
+    return ExecutionPlan(steps=tuple(steps), max_tool_rounds=max_tool_rounds)
+
+
 def plan_prompt(plan: TaskPlan) -> str:
+    execution = build_execution_plan(plan)
     routes = []
     if plan.needs_memory:
         routes.append("use relevant saved memory when it helps")
@@ -102,6 +124,8 @@ def plan_prompt(plan: TaskPlan) -> str:
     route_text = "; ".join(routes) if routes else "answer conversationally without unnecessary tools"
     return (
         f"Task plan: intent={plan.intent}, complexity={plan.complexity}. "
+        f"Execution stages: {', '.join(execution.steps)}. "
+        f"Max tool rounds: {execution.max_tool_rounds}. "
         f"Routing guidance: {route_text}. "
         "Treat these as hints, not facts; inspect the user's actual request before acting."
     )
