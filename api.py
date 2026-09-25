@@ -15,6 +15,7 @@ from tools import init_db, recall_memories, remember_fact
 from memory import index_document, index_file, search_rag
 from auth import authenticate, create_session, create_user, get_user, init_auth_db, revoke_session
 from multimodal import save_upload, read_upload
+from mcp_registry import registry_snapshot
 
 ensure_directories()
 init_db()
@@ -233,6 +234,9 @@ def get_file(path: str, user=Depends(current_user)):
         raise HTTPException(status_code=404, detail="File not found.")
     except PermissionError as exc:
         raise HTTPException(status_code=403, detail=str(exc))
+\n@app.get("/api/v1/mcp/servers")
+def mcp_servers(user=Depends(current_user)):
+    return {"servers": registry_snapshot()}
 \n@app.get("/api/v1")
 def api_root():
     return {
@@ -247,6 +251,6 @@ def api_root():
             "GET /api/v1/memories/search",
             "POST /api/v1/rag/documents",
             "POST /api/v1/rag/files",
-            "GET /api/v1/rag/search",\n            "POST /api/v1/files/upload",\n            "GET /api/v1/files/{path}",
+            "GET /api/v1/rag/search",\n            "POST /api/v1/files/upload",\n            "GET /api/v1/files/{path}",\n            "GET /api/v1/mcp/servers",
         ],
     }
