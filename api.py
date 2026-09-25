@@ -8,6 +8,7 @@ from typing import Optional
 
 from fastapi import Depends, FastAPI, File, Header, HTTPException, UploadFile\nfrom fastapi.responses import FileResponse, StreamingResponse
 from fastapi.middleware.cors import CORSMiddleware
+from starlette.middleware.base import BaseHTTPMiddleware
 from pydantic import BaseModel, Field
 
 from agent import MODEL, VISION_MODEL, run_agent, stream_agent
@@ -40,8 +41,8 @@ app.add_middleware(
     CORSMiddleware,
     allow_origins=origins,
     allow_credentials=True,
-    allow_methods=["*"],
-    allow_headers=["*"],
+    allow_methods=["GET", "POST", "PATCH", "DELETE", "OPTIONS"],
+    allow_headers=["Authorization", "Content-Type"],
 )
 
 
@@ -130,7 +131,7 @@ def health():
 def info():
     return {
         "name": "Personal AI Assistant",
-        "version": "0.10.0",
+        "version": "0.11.0",
         "model": MODEL,
         "shell_enabled": ALLOW_SHELL,
     }
