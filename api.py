@@ -413,7 +413,7 @@ def search_memories(q: str, limit: int = 8, user=Depends(current_user)):
     if not q.strip():
         raise HTTPException(status_code=400, detail="Query cannot be empty.")
     limit = max(1, min(limit, 50))
-    return {"query": q, "memories": recall_memories(q, limit=limit, user_id=user["id"])
+    return {"query": q, "memories": recall_memories(q, limit=limit, user_id=user["id"])}
 
 
 class RAGDocumentRequest(BaseModel):
