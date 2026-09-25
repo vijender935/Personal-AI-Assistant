@@ -12,6 +12,7 @@ from pydantic import BaseModel, Field
 from agent import MODEL, run_agent
 from config import ALLOW_SHELL, ensure_directories
 from tools import init_db, recall_memories, remember_fact
+from memory import index_document, index_file, search_rag
 
 ensure_directories()
 init_db()
@@ -121,6 +122,43 @@ def search_memories(q: str, limit: int = 8):
     return {"query": q, "memories": recall_memories(q, limit=limit)}
 
 
+class RAGDocumentRequest(BaseModel):
+    source: str = Field(..., min_length=1, max_length=500)
+    content: str = Field(..., min_length=1, max_length=200000)
+
+
+@app.post("/api/v1/rag/documents")
+def create_rag_document(request: RAGDocumentRequest):
+    try:
+        added = index_document(request.source, request.content)
+    except Exception as exc:
+        raise HTTPException(status_code=500, detail=str(exc)) from exc
+    return {"source": request.source, "chunks_added": added}
+
+
+@app.post("/api/v1/rag/files")
+def create_rag_file(path: str):
+    try:
+        added = index_file(path)
+    except FileNotFoundError:
+        raise HTTPException(status_code=404, detail="File not found.")
+    except PermissionError as exc:
+        raise HTTPException(status_code=403, detail=str(exc))
+    except Exception as exc:
+        raise HTTPException(status_code=500, detail=str(exc)) from exc
+    return {"path": path, "chunks_added": added}
+
+
+@app.get("/api/v1/rag/search")
+def rag_search(q: str, limit: int = 5):
+    if not q.strip():
+        raise HTTPException(status_code=400, detail="Query cannot be empty.")
+    try:
+        return {"query": q, "results": search_rag(q, limit=limit)}
+    except Exception as exc:
+        raise HTTPException(status_code=500, detail=str(exc)) from exc
+
+
 @app.get("/api/v1")
 def api_root():
     return {
@@ -133,5 +171,8 @@ def api_root():
             "GET /api/v1/memories",
             "POST /api/v1/memories",
             "GET /api/v1/memories/search",
+            "POST /api/v1/rag/documents",
+            "POST /api/v1/rag/files",
+            "GET /api/v1/rag/search",
         ],
     }
