@@ -489,3 +489,8 @@ The backend exposes the authenticated registry view at:
 The frontend includes an MCP Servers entry that displays configured servers.
 
 The registry is intentionally configuration-only in this phase. It does not blindly execute arbitrary remote commands. This keeps external MCP connectivity opt-in while establishing the architecture for a future MCP client/tool discovery layer.
+
+
+## Phase 15.3 — Document Understanding + RAG
+
+Uploaded PDF, DOCX, TXT, Markdown, CSV, JSON, and XML documents are parsed automatically and indexed into the authenticated user's semantic knowledge base. Image attachments continue to use vision inference. Document attachments use source-scoped semantic retrieval so unrelated user documents are not injected into the answer. Re-uploading a document path replaces its previous chunks.
