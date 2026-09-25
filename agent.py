@@ -3,7 +3,7 @@ from __future__ import annotations
 import json,logging,os,sys,time
 from typing import Optional
 from groq import Groq
-from config import MAX_HISTORY_MESSAGES,MAX_ITERATIONS,MAX_RETRIES,MODEL
+from config import MAX_HISTORY_MESSAGES,MAX_ITERATIONS,MAX_RETRIES,MODEL,VISION_MODEL
 from tools import TOOL_FUNCTIONS,TOOL_SCHEMAS,init_db,load_history,semantic_recall_memories,remember_fact,save_turn
 logger=logging.getLogger(__name__)
 logging.basicConfig(level=os.getenv("LOG_LEVEL","INFO").upper(),format="%(asctime)s | %(levelname)s | %(name)s | %(message)s")
@@ -49,7 +49,7 @@ def run_agent(goal,session_id="default",user_id=0,image_urls=None,verbose=True):
         response=None
         for retry in range(MAX_RETRIES+1):
             try:
-                response=client.chat.completions.create(model=MODEL,messages=messages,tools=TOOL_SCHEMAS,tool_choice="auto",temperature=0.4);break
+                response=client.chat.completions.create(model=VISION_MODEL if image_urls else MODEL,messages=messages,tools=TOOL_SCHEMAS,tool_choice="auto",temperature=0.4);break
             except Exception as exc:
                 logger.warning("Model request failed (retry %s): %s",retry,exc)
                 if retry<MAX_RETRIES:time.sleep(2**retry)
