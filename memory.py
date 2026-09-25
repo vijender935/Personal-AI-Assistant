@@ -99,3 +99,21 @@ def search_rag(query,limit=5,user_id=0,sources=None):
         if len(v)==len(q):scored.append((float(q@v),source,chunk_index,content))
     scored.sort(key=lambda x:x[0],reverse=True)
     return [{"score":round(score,4),"source":source,"chunk_index":chunk_index,"content":content} for score,source,chunk_index,content in scored[:max(1,min(limit,10))]]
+
+
+def rag_source_status(user_id=0):
+    """Return per-source RAG indexing status for an authenticated user."""
+    init_semantic_store()
+    with sqlite3.connect(DB_PATH) as con:
+        rows=con.execute(
+            """SELECT source, COUNT(*) AS chunks, MAX(created_at) AS indexed_at
+               FROM rag_documents
+               WHERE user_id=? AND embedding_version=?
+               GROUP BY source
+               ORDER BY source""",
+            (user_id, EMBEDDING_VERSION),
+        ).fetchall()
+    return [
+        {"source": source, "chunks": chunks, "indexed_at": indexed_at}
+        for source, chunks, indexed_at in rows
+    ]
