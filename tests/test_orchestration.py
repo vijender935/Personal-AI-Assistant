@@ -53,3 +53,17 @@ def test_execution_plan_orders_routes():
     assert "mcp_tool_execution" in execution.steps
     assert execution.steps[-2:] == ("validate_tool_results", "compose_answer")
     assert execution.max_tool_rounds == 4
+
+
+
+def test_tool_result_validation_and_recovery():
+    from orchestration import recovery_instruction, validate_tool_result
+
+    ok = validate_tool_result({"value": 42})
+    assert ok.ok is True
+    assert ok.content == "{'value': 42}"
+
+    failed = validate_tool_result("Tool error in calculator: invalid input")
+    assert failed.ok is False
+    assert failed.recoverable is True
+    assert "Do not invent missing data" in recovery_instruction("calculator", failed)
