@@ -5,11 +5,11 @@ import os
 import time
 from typing import Optional
 
-from fastapi import Depends, FastAPI, File, Header, HTTPException, UploadFile
+from fastapi import Depends, FastAPI, File, Header, HTTPException, UploadFile\nfrom fastapi.responses import StreamingResponse
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel, Field
 
-from agent import MODEL, VISION_MODEL, run_agent
+from agent import MODEL, VISION_MODEL, run_agent, stream_agent
 from config import ALLOW_SHELL, FILE_ROOT, ensure_directories
 from tools import init_db, recall_memories, remember_fact, load_history, list_sessions
 from memory import index_document, search_rag
@@ -173,6 +173,49 @@ def chat(request: ChatRequest, user=Depends(current_user)):
         answer=answer,
         session_id=request.session_id,
         model=VISION_MODEL if attachment_urls else MODEL,
+    )
+
+
+@app.post("/api/v1/chat/stream")
+def chat_stream(request: ChatRequest, user=Depends(current_user)):
+    if not os.getenv("GROQ_API_KEY"):
+        raise HTTPException(status_code=503, detail="GROQ_API_KEY is not configured.")
+    attachment_urls=[]
+    rag_sources=[]
+    for path in request.attachment_paths:
+        try:
+            attachment_urls.append(image_data_url(path, user_id=user["id"]))
+        except ValueError:
+            try:
+                candidate=_safe_path(path,user["id"])
+                if not is_supported_document(candidate):
+                    raise ValueError("unsupported attachment type")
+                user_root=(FILE_ROOT/f"user_{user['id']}").resolve()
+                rag_sources.append(str(candidate.relative_to(user_root)))
+            except (FileNotFoundError, PermissionError, ValueError) as exc:
+                raise HTTPException(status_code=400, detail=f"Invalid document attachment: {path}") from exc
+        except (FileNotFoundError, PermissionError) as exc:
+            raise HTTPException(status_code=400, detail=f"Invalid image attachment: {path}") from exc
+
+    internal_session=f"user-{user['id']}-{request.session_id}"
+
+    def event_stream():
+        yield "event: start\\ndata: {\\\"session_id\\\": \\""+request.session_id+"\\\"}\\n\\n"
+        for chunk in stream_agent(
+            request.message,
+            session_id=internal_session,
+            user_id=user["id"],
+            image_urls=attachment_urls,
+            rag_sources=rag_sources or None,
+        ):
+            payload=chunk.replace("\\", "\\\\").replace("\n", "\\n").replace('"', '\\\"')
+            yield f"data: {{\\\"text\\\":\\\"{payload}\\\"}}\\n\\n"
+        yield "event: done\\ndata: {}\\n\\n"
+
+    return StreamingResponse(
+        event_stream(),
+        media_type="text/event-stream",
+        headers={"Cache-Control":"no-cache","Connection":"keep-alive","X-Accel-Buffering":"no"},
     )
 
 
