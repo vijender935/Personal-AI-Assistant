@@ -1,0 +1,4 @@
+# Optional OCR support for local or larger-memory deployments
+-r requirements.txt
+rapidocr
+onnxruntime
