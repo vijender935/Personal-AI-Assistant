@@ -26,12 +26,13 @@ def test_mcp_timeout_is_bounded(monkeypatch):
 
 
 def test_mcp_discovery_cache(monkeypatch):
+    monkeypatch.setenv("MCP_SERVERS", '{"demo":{"transport":"streamable-http","url":"https://example/mcp"}}')
+    monkeypatch.setattr(mcp_client, "_registry_key", lambda user_id=0: "demo-cache-key")
     mcp_client._DISCOVERY_CACHE.update(
-        key='{"demo":{"transport":"streamable-http","url":"https://example/mcp"}}',
+        key="demo-cache-key",
         expires_at=9999999999.0,
         schemas=[{"type": "function", "function": {"name": "mcp__demo__ping"}}],
     )
-    monkeypatch.setenv("MCP_SERVERS", '{"demo":{"transport":"streamable-http","url":"https://example/mcp"}}')
     monkeypatch.setattr(mcp_client, "_discover_async", lambda user_id=0: (_ for _ in ()).throw(AssertionError("cache miss")))
     assert mcp_client.discover_tool_schemas()[0]["function"]["name"] == "mcp__demo__ping"
 
