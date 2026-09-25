@@ -159,3 +159,30 @@ def test_expired_session_is_rejected(monkeypatch):
     token = headers["Authorization"].split(" ", 1)[1]
     monkeypatch.setattr(auth.time, "time", lambda: 10**12)
     assert client.get("/api/v1/auth/me", headers=headers).status_code == 401
+
+
+def test_auth_login_success_and_invalid_password():
+    email = f"login-{uuid.uuid4().hex}@example.com"
+    response = client.post("/api/v1/auth/register", json={"name": "Login User", "email": email, "password": "password123"})
+    assert response.status_code == 200
+
+    response = client.post("/api/v1/auth/login", json={"email": email, "password": "password123"})
+    assert response.status_code == 200
+    assert response.json()["user"]["email"] == email
+
+    response = client.post("/api/v1/auth/login", json={"email": email, "password": "wrong-password"})
+    assert response.status_code == 401
+
+
+def test_auth_rate_limit(monkeypatch):
+    monkeypatch.setattr(api, "AUTH_RATE_LIMIT", 2)
+    monkeypatch.setattr(api, "AUTH_RATE_WINDOW", 60)
+    api._auth_attempts.clear()
+
+    email = f"rate-{uuid.uuid4().hex}@example.com"
+    for _ in range(2):
+        response = client.post("/api/v1/auth/login", json={"email": email, "password": "wrong-password"})
+        assert response.status_code == 401
+
+    response = client.post("/api/v1/auth/login", json={"email": email, "password": "wrong-password"})
+    assert response.status_code == 429
