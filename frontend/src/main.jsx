@@ -12,6 +12,8 @@ function App(){
  const chat=chats.find(c=>c.id===active)||chats[0];
  const token=localStorage.getItem("personal_ai_token");
  useEffect(()=>{if(!token)return;fetch(API+"/api/v1/auth/me",{headers:{Authorization:"Bearer "+token}}).then(async r=>{if(r.ok){const d=await r.json();setUser(d.user)}else{localStorage.removeItem("personal_ai_token");setUser(null)}}).catch(()=>{});},[token]);
+ useEffect(()=>{if(!token||!user)return;fetch(API+"/api/v1/chats",{headers:{Authorization:"Bearer "+token}}).then(async r=>{if(!r.ok)return;const d=await r.json();if(d.chats?.length){setChats(d.chats.map(c=>({id:c.session_id,title:c.title||"New conversation",messages:c.messages||[]})));setActive(d.chats[0].session_id);}}).catch(()=>{});},[token,user]);
+ useEffect(()=>{if(!token||!user||!active)return;fetch(API+"/api/v1/chats/"+encodeURIComponent(active),{headers:{Authorization:"Bearer "+token}}).then(async r=>{if(!r.ok)return;const d=await r.json();setChats(cs=>cs.map(c=>c.id===active?{...c,messages:d.messages||[]}:c));}).catch(()=>{});},[active,token,user]);
  async function logout(){if(token){try{await fetch(API+"/api/v1/auth/logout",{method:"POST",headers:{Authorization:"Bearer "+token}})}catch(e){}}localStorage.removeItem("personal_ai_token");setUser(null);setChats(initial);setActive(1);setSettings(false);}
  async function loadMcp(){if(!token)return;const r=await fetch(API+"/api/v1/mcp/servers",{headers:{Authorization:"Bearer "+token}});if(r.ok){const d=await r.json();alert(d.servers.length?d.servers.map(s=>s.name+" ("+s.transport+")").join("\\n"):"No MCP servers configured.");}}
  async function authSubmit(){const path=authMode==="login"?"/api/v1/auth/login":"/api/v1/auth/register";const body=authMode==="login"?{email:auth.email,password:auth.password}:auth;const r=await fetch(API+path,{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify(body)});const d=await r.json();if(!r.ok){alert(d.detail||"Authentication failed");return;}localStorage.setItem("personal_ai_token",d.token);setUser(d.user);}
@@ -26,7 +28,7 @@ function App(){
   }catch(e){update([...next,{role:"assistant",content:"Backend se connection nahi ho paaya. FastAPI server check karo."}]);}
   finally{setLoading(false);}
  }
- function newChat(){const id=Date.now();setChats(cs=>[{id,title:"New conversation",messages:[]},...cs]);setActive(id);}
+ function newChat(){const id="web-"+Date.now();setChats(cs=>[{id,title:"New conversation",messages:[]},...cs]);setActive(id);}
  return <div className="app">
   {sidebar&&<aside className="sidebar">
    <div className="brand"><div className="logo">✦</div><span>Personal AI</span><button onClick={()=>setSidebar(false)}><PanelLeftClose size={18}/></button></div>
