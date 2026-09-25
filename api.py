@@ -3,6 +3,7 @@ from __future__ import annotations
 
 import os
 import time
+import logging
 from typing import Optional
 
 from fastapi import Depends, FastAPI, File, Header, HTTPException, UploadFile\nfrom fastapi.responses import FileResponse, StreamingResponse
@@ -17,6 +18,8 @@ from auth import authenticate, create_session, create_user, get_user, init_auth_
 from multimodal import save_upload, read_upload, image_data_url, _safe_path
 from mcp_registry import registry_snapshot
 from document_parser import extract_and_limit, is_supported_document
+
+logger = logging.getLogger(__name__)
 
 ensure_directories()
 init_db()
