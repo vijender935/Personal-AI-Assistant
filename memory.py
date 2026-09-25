@@ -4,7 +4,8 @@ import hashlib,sqlite3
 from typing import Iterable
 from config import DB_PATH,FILE_ROOT,ensure_directories
 from multimodal import _safe_path
-MODEL_NAME="sentence-transformers/all-MiniLM-L6-v2";MAX_CHUNK_CHARS=1800;CHUNK_OVERLAP=250
+MODEL_NAME="BAAI/bge-small-en-v1.5";MAX_CHUNK_CHARS=1800;CHUNK_OVERLAP=250
+EMBEDDING_VERSION="fastembed-bge-small-en-v1.5"
 _model=None
 def _get_model():
     global _model
