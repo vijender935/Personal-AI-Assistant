@@ -15,6 +15,9 @@ def save_upload(filename,content,user_id):
     name=Path(filename).name
     if not name:raise ValueError("filename is required")
     target=_safe_path(name,user_id);target.write_bytes(content);return str(target.relative_to(_user_root(user_id)))
+def resolve_upload_path(path,user_id):
+    return _safe_path(path,user_id)
+
 def read_upload(path,user_id):
     target=_safe_path(path,user_id)
     if not target.is_file():raise FileNotFoundError(path)
