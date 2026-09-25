@@ -4,7 +4,6 @@ from __future__ import annotations
 import os
 import time
 import logging
-import re
 from typing import Optional
 
 from fastapi import Depends, FastAPI, File, Header, HTTPException, UploadFile, Request
