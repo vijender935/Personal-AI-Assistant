@@ -63,7 +63,7 @@ def _env_server_configs() -> list[MCPServerConfig]:
             if not isinstance(url, str):
                 continue
             try:
-                url = validate_connector_url(url)
+                url = validate_connector_url(url, resolve_dns=False)
             except ValueError:
                 continue
             configs.append(MCPServerConfig(**common, url=url))
