@@ -4,7 +4,7 @@ import {Menu,Plus,Search,Settings,User,Send,MessageSquare,PanelLeftClose} from "
 import FileUpload from "./components/FileUpload";
 import "./styles.css";
 
-const API="http://127.0.0.1:8000";
+const API=import.meta.env.VITE_API_URL || "http://127.0.0.1:8000";
 const initial=[{id:1,title:"New conversation",messages:[]}];
 
 function App(){
