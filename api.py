@@ -9,13 +9,14 @@ from fastapi import Depends, FastAPI, File, Header, HTTPException, UploadFile
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel, Field
 
-from agent import MODEL, run_agent
-from config import ALLOW_SHELL, ensure_directories
+from agent import MODEL, VISION_MODEL, run_agent
+from config import ALLOW_SHELL, FILE_ROOT, ensure_directories
 from tools import init_db, recall_memories, remember_fact
 from memory import index_document, index_file, search_rag
 from auth import authenticate, create_session, create_user, get_user, init_auth_db, revoke_session
-from multimodal import save_upload, read_upload, image_data_url
+from multimodal import save_upload, read_upload, image_data_url, _safe_path
 from mcp_registry import registry_snapshot
+from document_parser import extract_and_limit, is_supported_document
 
 ensure_directories()
 init_db()
@@ -23,7 +24,7 @@ init_auth_db()
 
 app = FastAPI(
     title="Personal AI Assistant API",
-    version="0.8.0",
+    version="0.9.0",
     description="REST API for the Personal AI Assistant agent engine.",
 )
 
@@ -126,7 +127,7 @@ def health():
 def info():
     return {
         "name": "Personal AI Assistant",
-        "version": "0.8.0",
+        "version": "0.9.0",
         "model": MODEL,
         "shell_enabled": ALLOW_SHELL,
     }
@@ -139,16 +140,27 @@ def chat(request: ChatRequest, user=Depends(current_user)):
 
     try:
         attachment_urls=[]
+        rag_sources=[]
         for path in request.attachment_paths:
             try:
                 attachment_urls.append(image_data_url(path, user_id=user["id"]))
-            except (FileNotFoundError, PermissionError, ValueError) as exc:
+            except ValueError:
+                try:
+                    candidate=_safe_path(path,user["id"])
+                    if not is_supported_document(candidate):
+                        raise ValueError("unsupported attachment type")
+                    user_root=(FILE_ROOT/f"user_{user['id']}").resolve()
+                    rag_sources.append(str(candidate.relative_to(user_root)))
+                except (FileNotFoundError, PermissionError, ValueError) as exc:
+                    raise HTTPException(status_code=400, detail=f"Invalid document attachment: {path}") from exc
+            except (FileNotFoundError, PermissionError) as exc:
                 raise HTTPException(status_code=400, detail=f"Invalid image attachment: {path}") from exc
         answer = run_agent(
             request.message,
-            session_id=f"user-{user["id"]}-{request.session_id}",
+            session_id=f"user-{user['id']}-{request.session_id}",
             user_id=user["id"],
             image_urls=attachment_urls,
+            rag_sources=rag_sources or None,
             verbose=False,
         )
     except Exception as exc:
@@ -160,7 +172,7 @@ def chat(request: ChatRequest, user=Depends(current_user)):
     return ChatResponse(
         answer=answer,
         session_id=request.session_id,
-        model=MODEL,
+        model=VISION_MODEL if attachment_urls else MODEL,
     )
 
 
@@ -230,9 +242,16 @@ async def upload_file(file: UploadFile = File(...), user=Depends(current_user)):
         raise HTTPException(status_code=413, detail="File is larger than 10 MB.")
     try:
         path = save_upload(file.filename, content, user_id=user["id"])
+        indexed_chunks=0
+        candidate=_safe_path(path,user["id"])
+        if is_supported_document(candidate):
+            document_text=extract_and_limit(candidate)
+            indexed_chunks=index_document(path,document_text,user_id=user["id"],replace_source=True)
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
     except Exception as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc
-    return {"path": path, "filename": file.filename, "content_type": file.content_type, "size": len(content)}
+    return {"path": path, "filename": file.filename, "content_type": file.content_type, "size": len(content), "indexed_chunks": indexed_chunks}
 
 
 @app.get("/api/v1/files/{path:path}")

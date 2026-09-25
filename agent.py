@@ -18,19 +18,19 @@ def _extract_memory_candidate(text):
     for prefix in prefixes:
         if lower.startswith(prefix):return text.strip()[len(prefix):].strip()
     return None
-def build_messages(goal,session_id,user_id=0):
+def build_messages(goal,session_id,user_id=0,rag_sources=None):
     history=load_history(session_id,MAX_HISTORY_MESSAGES,user_id=user_id);memories=semantic_recall_memories(goal,limit=8,user_id=user_id)
     messages=[{"role":"system","content":SYSTEM_PROMPT}]
     if memories:messages.append({"role":"system","content":"Relevant saved memories (semantic retrieval):\n"+"\n".join(f"- {m}" for m in memories)})
     try:
         from memory import search_rag
-        rag_results=search_rag(goal,limit=4,user_id=user_id)
+        rag_results=search_rag(goal,limit=4,user_id=user_id,sources=rag_sources)
     except Exception:rag_results=[]
     if rag_results:
         context="\n\n".join(f"[{item['source']} | score={item['score']}]\n{item['content']}" for item in rag_results)
         messages.append({"role":"system","content":"Relevant knowledge-base context:\n"+context})
     messages.extend(history);messages.append({"role":"user","content":goal});return messages
-def run_agent(goal,session_id="default",user_id=0,image_urls=None,verbose=True):
+def run_agent(goal,session_id="default",user_id=0,image_urls=None,rag_sources=None,verbose=True):
     goal=goal.strip()
     if not goal:return "Please enter a message."
     api_key=os.getenv("GROQ_API_KEY")
@@ -42,7 +42,7 @@ def run_agent(goal,session_id="default",user_id=0,image_urls=None,verbose=True):
             from memory import remember_semantic
             remember_semantic(explicit_memory,source="user-explicit",user_id=user_id)
         except Exception as exc:logger.warning("Semantic memory unavailable: %s",exc)
-    client,messages=Groq(api_key=api_key),build_messages(goal,session_id,user_id=user_id)
+    client,messages=Groq(api_key=api_key),build_messages(goal,session_id,user_id=user_id,rag_sources=rag_sources)
     if image_urls:
         messages[-1]["content"]=[{"type":"text","text":goal}]+[{"type":"image_url","image_url":{"url":url}} for url in image_urls]
     for _ in range(MAX_ITERATIONS):
