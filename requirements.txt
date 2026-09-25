@@ -11,3 +11,4 @@ mcp>=2,<3
 python-multipart
 pymupdf
 python-docx
+psycopg[binary]
