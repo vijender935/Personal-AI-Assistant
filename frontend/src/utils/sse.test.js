@@ -17,6 +17,6 @@ describe("parseSSEEvent",()=>{
  it("combines multiple data lines",()=>{
   const received=[];
   parseSSEEvent('event: message\ndata: {"text":"a",\ndata: "b"}',(type,data)=>received.push([type,data]));
-  expect(received).toEqual([["message",{text:"a", "data":"b"}]]);
+  expect(received).toEqual([["message",{text:"a","data":"b"}]]);
  });
 });
