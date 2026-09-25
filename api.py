@@ -228,13 +228,36 @@ def list_chats(limit: int = 50, user=Depends(current_user)):
     for session in sessions:
         public_id = session[len(prefix):] if session.startswith(prefix) else session
         history = load_history(session, limit=4, user_id=user["id"])
-        title = next((m["content"] for m in history if m["role"] == "user"), "New conversation")
+        title = get_chat_title(session, user_id=user["id"]) or next((m["content"] for m in history if m["role"] == "user"), "New conversation")
         chats.append({
             "session_id": public_id,
             "title": title[:80],
             "messages": history,
         })
     return {"chats": chats}
+
+class ChatTitleRequest(BaseModel):
+    title: str = Field(..., min_length=1, max_length=80)
+
+@app.patch("/api/v1/chats/{session_id}")
+def rename_chat(session_id: str, request: ChatTitleRequest, user=Depends(current_user)):
+    if not session_id or len(session_id) > 200:
+        raise HTTPException(status_code=400, detail="Invalid session id.")
+    internal_id = f"user-{user['id']}-{session_id}"
+    if not load_history(internal_id, limit=1, user_id=user["id"]):
+        raise HTTPException(status_code=404, detail="Chat not found.")
+    set_chat_title(internal_id, request.title, user_id=user["id"])
+    return {"session_id": session_id, "title": request.title.strip()}
+
+@app.delete("/api/v1/chats/{session_id}")
+def remove_chat(session_id: str, user=Depends(current_user)):
+    if not session_id or len(session_id) > 200:
+        raise HTTPException(status_code=400, detail="Invalid session id.")
+    internal_id = f"user-{user['id']}-{session_id}"
+    if not load_history(internal_id, limit=1, user_id=user["id"]):
+        raise HTTPException(status_code=404, detail="Chat not found.")
+    delete_chat(internal_id, user_id=user["id"])
+    return {"deleted": True, "session_id": session_id}
 
 
 @app.get("/api/v1/chats/{session_id}")
