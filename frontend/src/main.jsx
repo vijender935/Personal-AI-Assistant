@@ -21,32 +21,26 @@ function App(){
  const update=(messages)=>setChats(cs=>cs.map(c=>c.id===active?{...c,messages,title:c.messages.length?c.title:(messages[0]?.content||"New conversation").slice(0,32)}:c));
  async function send(){
   const message=text.trim(); if(!message||loading)return;
-  const next=[...chat.messages,{role:"user",content:message}]; update(next); setText(""); setLoading(true);
+  const next=[...chat.messages,{role:"user",content:message},{role:"assistant",content:""}];
+  update(next); setText(""); setLoading(true);
   try{
-   const r=await fetch(API+"/api/v1/chat",{method:"POST",headers:{"Content-Type":"application/json",Authorization:"Bearer "+token},body:JSON.stringify({message,session_id:"web-"+active,attachment_paths:attachments.map(a=>a.path)})});
-   const data=await r.json(); update([...next,{role:"assistant",content:r.ok?data.answer:(data.detail||"Request failed.")}]);
-  }catch(e){update([...next,{role:"assistant",content:"Backend se connection nahi ho paaya. FastAPI server check karo."}]);}
-  finally{setLoading(false);}
- }
- function newChat(){const id="web-"+Date.now();setChats(cs=>[{id,title:"New conversation",messages:[]},...cs]);setActive(id);}
- return <div className="app">
-  {sidebar&&<aside className="sidebar">
-   <div className="brand"><div className="logo">✦</div><span>Personal AI</span><button onClick={()=>setSidebar(false)}><PanelLeftClose size={18}/></button></div>
-   <button className="new" onClick={newChat}><Plus size={18}/>New chat</button>
-   <div className="search"><Search size={16}/><input placeholder="Search chats"/></div>
-   <div className="chat-list">{chats.map(c=><button className={c.id===active?"chat active":"chat"} key={c.id} onClick={()=>setActive(c.id)}><MessageSquare size={16}/><span>{c.title}</span></button>)}</div>
-   <div className="sidebar-bottom"><button onClick={()=>setSettings(true)}><Settings size={18}/>Settings</button><button onClick={loadMcp}><MessageSquare size={18}/>MCP Servers</button><button onClick={()=>setSettings(true)}><User size={18}/>Profile</button><button onClick={logout}>Logout</button></div>
-  </aside>}
-  <main className="main">
-   <header><button className="icon" onClick={()=>setSidebar(true)}><Menu size={20}/></button><span className="model">Personal AI <b>GPT-OSS 120B</b></span><button className="avatar" onClick={()=>setSettings(true)}>{user?.name?.[0]?.toUpperCase()||"V"}</button></header>
-   <section className="messages">
-    {chat.messages.length===0?<div className="welcome"><div className="welcome-logo">✦</div><h1>How can I help you?</h1><p>Your personal AI assistant for conversation, knowledge and tools.</p><div className="suggestions"><button onClick={()=>setText("Explain my project architecture")}>Explain my project</button><button onClick={()=>setText("Search my knowledge base")}>Search knowledge</button><button onClick={()=>setText("Help me write Python code")}>Write Python code</button></div></div>:
-     chat.messages.map((m,i)=><div className={m.role==="user"?"bubble user":"bubble assistant"} key={i}><div className="role">{m.role==="user"?"You":"Personal AI"}</div><div>{m.content}</div></div>)}
-    {loading&&<div className="bubble assistant"><div className="role">Personal AI</div><div className="typing"><i/><i/><i/></div></div>}
-   </section>
-   <div className="composer-wrap"><div className="composer"><FileUpload onFile={async file=>{if(!token){alert("Login required");return;}const fd=new FormData();fd.append("file",file);const r=await fetch(API+"/api/v1/files/upload",{method:"POST",headers:{Authorization:"Bearer "+token},body:fd});const d=await r.json();if(!r.ok){alert(d.detail||"Upload failed");return;}setAttachments(xs=>[...xs.slice(-2),{path:d.path,name:d.filename,indexed:d.indexed_chunks||0}]);}}/><div className="attachments">{attachments.map(a=><span key={a.path}>{a.name}{a.indexed?` · ${a.indexed} chunks`:""} <button onClick={()=>setAttachments(xs=>xs.filter(x=>x.path!==a.path))}>×</button></span>)}</div><textarea value={text} onChange={e=>setText(e.target.value)} onKeyDown={e=>{if(e.key==="Enter"&&!e.shiftKey){e.preventDefault();send()}}} placeholder="Message Personal AI..." rows="1"/><button className="send" onClick={send} disabled={!text.trim()||loading}><Send size={18}/></button></div><small>Personal AI can make mistakes. Verify important information.</small></div>
-  </main>
-  {settings&&<div className="overlay" onClick={()=>setSettings(false)}><div className="settings" onClick={e=>e.stopPropagation()}><div className="settings-head"><h2>Settings</h2><button onClick={()=>setSettings(false)}>×</button></div><label>API endpoint<input value={API} readOnly/></label><label>Appearance<select defaultValue="system"><option>System</option><option>Light</option><option>Dark</option></select></label><label>Model<input value="openai/gpt-oss-120b" readOnly/></label><label>Account<input value={user?.email||""} readOnly/></label><button className="auth-submit" onClick={logout}>Logout</button></div></div>}
- </div>
-}
-createRoot(document.getElementById("root")).render(<App/>);
+   const r=await fetch(API+"/api/v1/chat/stream",{method:"POST",headers:{"Content-Type":"application/json",Authorization:"Bearer "+token},body:JSON.stringify({message,session_id:"web-"+active,attachment_paths:attachments.map(a=>a.path)})});
+   if(!r.ok){const d=await r.json();update([...next.slice(0,-1),{role:"user",content:message},{role:"assistant",content:d.detail||"Request failed."}]);return;}
+   const reader=r.body.getReader(),decoder=new TextDecoder(); let buffer="",answer="";
+   while(true){
+    const {value,done}=await reader.read(); if(done)break;
+    buffer+=decoder.decode(value,{stream:true});
+    const events=buffer.split("\\n\\n"); buffer=events.pop()||"";
+    for(const event of events){
+     const line=event.split("\\n").find(x=>x.startsWith("data: "));
+     if(!line)continue;
+     try{
+      const payload=JSON.parse(line.slice(6));
+      if(payload.text){answer+=payload.text;update([...next.slice(0,-1),{role:"user",content:message},{role:"assistant",content:answer}]);}
+     }catch(e){}
+    }
+   }
+  }catch(e){
+   update([...next.slice(0,-1),{role:"user",content:message},{role:"assistant",content:"Backend se connection nahi ho paaya. FastAPI server check karo."}]);
+  }finally{setLoading(false);}
+ };
