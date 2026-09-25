@@ -90,9 +90,9 @@ def search_rag(query,limit=5,user_id=0,sources=None):
     with sqlite3.connect(DB_PATH) as con:
         if sources:
             placeholders=",".join("?" for _ in sources)
-            rows=con.execute(f"SELECT source,chunk_index,content,embedding FROM rag_documents WHERE user_id=? AND source IN ({placeholders})",(user_id,*sources)).fetchall()
+            rows=con.execute(f"SELECT source,chunk_index,content,embedding FROM rag_documents WHERE user_id=? AND embedding_version=? AND source IN ({placeholders})",(user_id,EMBEDDING_VERSION,*sources)).fetchall()
         else:
-            rows=con.execute("SELECT source,chunk_index,content,embedding FROM rag_documents WHERE user_id=?",(user_id,)).fetchall()
+            rows=con.execute("SELECT source,chunk_index,content,embedding FROM rag_documents WHERE user_id=? AND embedding_version=?",(user_id,EMBEDDING_VERSION)).fetchall()
     scored=[]
     for source,chunk_index,content,blob in rows:
         v=_vector(blob)
