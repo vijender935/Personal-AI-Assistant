@@ -14,7 +14,7 @@ from config import ALLOW_SHELL, ensure_directories
 from tools import init_db, recall_memories, remember_fact
 from memory import index_document, index_file, search_rag
 from auth import authenticate, create_session, create_user, get_user, init_auth_db, revoke_session
-from multimodal import save_upload, read_upload
+from multimodal import save_upload, read_upload, image_data_url
 from mcp_registry import registry_snapshot
 
 ensure_directories()
@@ -44,6 +44,7 @@ app.add_middleware(
 class ChatRequest(BaseModel):
     message: str = Field(..., min_length=1, max_length=20000)
     session_id: str = Field(default="default", min_length=1, max_length=200)
+    attachment_paths: list[str] = Field(default_factory=list, max_length=3)
 
 
 class ChatResponse(BaseModel):
@@ -137,10 +138,17 @@ def chat(request: ChatRequest, user=Depends(current_user)):
         raise HTTPException(status_code=503, detail="GROQ_API_KEY is not configured.")
 
     try:
+        attachment_urls=[]
+        for path in request.attachment_paths:
+            try:
+                attachment_urls.append(image_data_url(path, user_id=user["id"]))
+            except (FileNotFoundError, PermissionError, ValueError) as exc:
+                raise HTTPException(status_code=400, detail=f"Invalid image attachment: {path}") from exc
         answer = run_agent(
             request.message,
             session_id=f"user-{user["id"]}-{request.session_id}",
             user_id=user["id"],
+            image_urls=attachment_urls,
             verbose=False,
         )
     except Exception as exc:
