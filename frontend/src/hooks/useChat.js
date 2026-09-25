@@ -1,8 +1,18 @@
 import {useState} from "react";
 import {parseSSEEvent} from "../utils/sse";
 
+export function responseDetailFromPayload(data,fallback){
+ return data?.detail||fallback;
+}
+
 async function responseDetail(response,fallback){
- try{const data=await response.json();return data.detail||fallback}catch{return fallback}
+ try{return responseDetailFromPayload(await response.json(),fallback)}catch{return fallback}
+}
+
+export function getEditableLastUser(messages){
+ if(!messages?.length||messages.length<2)return null;
+ const userIndex=messages.length-2,old=messages[userIndex];
+ return old?.role==="user"?{value:old.content,index:userIndex}:null;
 }
 
 export default function useChat({API,token,chats,setChats,active,setActive,text,setText,attachments,setAttachments,loading,setLoading,notify}){
@@ -24,9 +34,8 @@ export default function useChat({API,token,chats,setChats,active,setActive,text,
  }
 
  function editLastUser(){
-  if(loading||!chat?.messages?.length||chat.messages.length<2)return null;
-  const userIndex=chat.messages.length-2,old=chat.messages[userIndex];
-  return old.role==="user"?{value:old.content,index:userIndex}:null;
+  if(loading)return null;
+  return getEditableLastUser(chat?.messages);
  }
 
  async function send(){
