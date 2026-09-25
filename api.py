@@ -13,7 +13,8 @@ from starlette.middleware.base import BaseHTTPMiddleware
 from pydantic import BaseModel, Field
 
 from agent import MODEL, VISION_MODEL, run_agent, stream_agent
-from config import ALLOW_SHELL, FILE_ROOT, ensure_directories
+from config import ALLOW_SHELL, DB_PATH, FILE_ROOT, ensure_directories
+from db import connect
 from tools import init_db, recall_memories, remember_fact, load_history, list_sessions, set_chat_title, get_chat_title, delete_chat, remove_last_assistant, remove_last_turn, save_turn
 from memory import index_document, search_rag, rag_source_status, delete_semantic_memory, delete_rag_source, remember_semantic
 from auth import authenticate, create_session, create_user, get_user, init_auth_db, revoke_session
@@ -47,6 +48,18 @@ app.add_middleware(
     allow_methods=["GET", "POST", "PATCH", "DELETE", "OPTIONS"],
     allow_headers=["Authorization", "Content-Type"],
 )
+
+
+class SecurityHeadersMiddleware(BaseHTTPMiddleware):
+    async def dispatch(self, request, call_next):
+        response = await call_next(request)
+        response.headers.setdefault("X-Content-Type-Options", "nosniff")
+        response.headers.setdefault("X-Frame-Options", "DENY")
+        response.headers.setdefault("Referrer-Policy", "strict-origin-when-cross-origin")
+        return response
+
+
+app.add_middleware(SecurityHeadersMiddleware)
 
 
 class ChatRequest(BaseModel):
@@ -315,7 +328,7 @@ def regenerate_chat(session_id: str, user=Depends(current_user)):
         raise HTTPException(status_code=400, detail="Unable to regenerate response.")
     user_message = next((m["content"] for m in reversed(history[:-1]) if m["role"] == "user"), None)
     if not user_message:
-        raise HTTPException(status_code=400, detail="No user message available.")
+        raise HTTPException(status_code=400, detail="No user message available." )
     try:
         answer = run_agent(user_message, session_id=internal_id, user_id=user["id"], verbose=False)
     except Exception as exc:
@@ -374,13 +387,14 @@ def create_memory(request: MemoryRequest, user=Depends(current_user)):
         logger.warning("Semantic memory indexing failed: %s", exc)
     return MemoryResponse(saved=True, fact=request.fact)
 
+
 @app.delete("/api/v1/memories")
 def delete_memory(fact: str, user=Depends(current_user)):
     if not fact.strip():
         raise HTTPException(status_code=400, detail="Fact cannot be empty.")
     exact = fact.strip()
     deleted_exact = delete_semantic_memory(exact, user_id=user["id"])
-    with __import__("db").connect(__import__("config").DB_PATH) as con:
+    with connect(DB_PATH) as con:
         cur = con.execute("DELETE FROM memories WHERE user_id=? AND fact=?", (user["id"], exact))
         deleted = cur.rowcount > 0 or deleted_exact
     return {"deleted": deleted, "fact": exact}
