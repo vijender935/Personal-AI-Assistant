@@ -144,17 +144,17 @@ def chat(request: ChatRequest, user=Depends(current_user)):
         raise HTTPException(status_code=503, detail="GROQ_API_KEY is not configured.")
 
     try:
-        attachment_urls=[]
-        rag_sources=[]
+        attachment_urls = []
+        rag_sources = []
         for path in request.attachment_paths:
             try:
                 attachment_urls.append(image_data_url(path, user_id=user["id"]))
             except ValueError:
                 try:
-                    candidate=_safe_path(path,user["id"])
+                    candidate = _safe_path(path, user["id"])
                     if not is_supported_document(candidate):
                         raise ValueError("unsupported attachment type")
-                    user_root=(FILE_ROOT/f"user_{user['id']}").resolve()
+                    user_root = (FILE_ROOT / f"user_{user['id']}").resolve()
                     rag_sources.append(str(candidate.relative_to(user_root)))
                 except (FileNotFoundError, PermissionError, ValueError) as exc:
                     raise HTTPException(status_code=400, detail=f"Invalid document attachment: {path}") from exc
@@ -185,28 +185,29 @@ def chat(request: ChatRequest, user=Depends(current_user)):
 def chat_stream(request: ChatRequest, user=Depends(current_user)):
     if not os.getenv("GROQ_API_KEY"):
         raise HTTPException(status_code=503, detail="GROQ_API_KEY is not configured.")
-    attachment_urls=[]
-    rag_sources=[]
+    attachment_urls = []
+    rag_sources = []
     for path in request.attachment_paths:
         try:
             attachment_urls.append(image_data_url(path, user_id=user["id"]))
         except ValueError:
             try:
-                candidate=_safe_path(path,user["id"])
+                candidate = _safe_path(path, user["id"])
                 if not is_supported_document(candidate):
                     raise ValueError("unsupported attachment type")
-                user_root=(FILE_ROOT/f"user_{user['id']}").resolve()
+                user_root = (FILE_ROOT / f"user_{user['id']}").resolve()
                 rag_sources.append(str(candidate.relative_to(user_root)))
             except (FileNotFoundError, PermissionError, ValueError) as exc:
                 raise HTTPException(status_code=400, detail=f"Invalid document attachment: {path}") from exc
         except (FileNotFoundError, PermissionError) as exc:
             raise HTTPException(status_code=400, detail=f"Invalid image attachment: {path}") from exc
 
-    internal_session=f"user-{user['id']}-{request.session_id}"
+    internal_session = f"user-{user['id']}-{request.session_id}"
 
     def event_stream():
         import json
-        yield "event: start\\ndata: " + json.dumps({"session_id": request.session_id}) + "\\n\\n"
+
+        yield "event: start\ndata: " + json.dumps({"session_id": request.session_id}) + "\n\n"
         try:
             for chunk in stream_agent(
                 request.message,
@@ -215,16 +216,16 @@ def chat_stream(request: ChatRequest, user=Depends(current_user)):
                 image_urls=attachment_urls,
                 rag_sources=rag_sources or None,
             ):
-                yield "event: delta\\ndata: " + json.dumps({"text": chunk}, ensure_ascii=False) + "\\n\\n"
-            yield "event: done\\ndata: {}\\n\\n"
+                yield "event: delta\ndata: " + json.dumps({"text": chunk}, ensure_ascii=False) + "\n\n"
+            yield "event: done\ndata: {}\n\n"
         except Exception:
             logger.exception("Streaming request failed")
-            yield "event: error\\ndata: " + json.dumps({"detail": "Streaming request failed."}) + "\\n\\n"
+            yield "event: error\ndata: " + json.dumps({"detail": "Streaming request failed."}) + "\n\n"
 
     return StreamingResponse(
         event_stream(),
         media_type="text/event-stream",
-        headers={"Cache-Control":"no-cache","Connection":"keep-alive","X-Accel-Buffering":"no"},
+        headers={"Cache-Control": "no-cache", "Connection": "keep-alive", "X-Accel-Buffering": "no"},
     )
 
 
@@ -245,8 +246,10 @@ def list_chats(limit: int = 50, user=Depends(current_user)):
         })
     return {"chats": chats}
 
+
 class ChatTitleRequest(BaseModel):
     title: str = Field(..., min_length=1, max_length=80)
+
 
 @app.patch("/api/v1/chats/{session_id}")
 def rename_chat(session_id: str, request: ChatTitleRequest, user=Depends(current_user)):
@@ -257,6 +260,7 @@ def rename_chat(session_id: str, request: ChatTitleRequest, user=Depends(current
         raise HTTPException(status_code=404, detail="Chat not found.")
     set_chat_title(internal_id, request.title, user_id=user["id"])
     return {"session_id": session_id, "title": request.title.strip()}
+
 
 @app.post("/api/v1/chats/{session_id}/regenerate")
 def regenerate_chat(session_id: str, user=Depends(current_user)):
@@ -277,6 +281,7 @@ def regenerate_chat(session_id: str, user=Depends(current_user)):
         raise HTTPException(status_code=500, detail="Regeneration failed.") from exc
     return {"session_id": session_id, "answer": answer}
 
+
 @app.post("/api/v1/chats/{session_id}/edit")
 def edit_last_message(session_id: str, request: ChatRequest, user=Depends(current_user)):
     if not session_id or len(session_id) > 200:
@@ -295,6 +300,7 @@ def edit_last_message(session_id: str, request: ChatRequest, user=Depends(curren
     except Exception as exc:
         raise HTTPException(status_code=500, detail="Edit and resend failed.") from exc
     return {"session_id": session_id, "message": message, "answer": answer}
+
 
 @app.delete("/api/v1/chats/{session_id}")
 def remove_chat(session_id: str, user=Depends(current_user)):
@@ -369,7 +375,10 @@ def create_rag_file(path: str, user=Depends(current_user)):
     except Exception as exc:
         raise HTTPException(status_code=500, detail=str(exc)) from exc
     return {"path": path, "chunks_added": added}
+
+
 MAX_UPLOAD_BYTES = 10 * 1024 * 1024
+
 
 def _file_metadata(path, user_id):
     candidate = _safe_path(path, user_id)
@@ -379,13 +388,14 @@ def _file_metadata(path, user_id):
     import mimetypes
     mime, _ = mimetypes.guess_type(candidate.name)
     return {
-        "path": str(candidate.relative_to((FILE_ROOT / f"user-{user_id}").resolve())) if False else path,
+        "path": path,
         "name": candidate.name,
         "size": stat.st_size,
         "mime_type": mime or "application/octet-stream",
         "extension": candidate.suffix.lower(),
         "modified_at": stat.st_mtime,
     }
+
 
 @app.post("/api/v1/files/upload")
 async def upload_file(file: UploadFile = File(...), user=Depends(current_user)):
@@ -406,6 +416,7 @@ async def upload_file(file: UploadFile = File(...), user=Depends(current_user)):
         return {"path": path, "name": candidate.name, "size": len(content), "indexed_chunks": indexed_chunks}
     except ValueError as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc
+
 
 @app.get("/api/v1/files")
 def list_files(user=Depends(current_user)):
@@ -435,6 +446,7 @@ def list_files(user=Depends(current_user)):
         item["rag_indexed_at"] = status["indexed_at"] if status else None
     return {"files": files}
 
+
 @app.get("/api/v1/files/{path:path}")
 def get_file(path: str, user=Depends(current_user)):
     try:
@@ -447,6 +459,7 @@ def get_file(path: str, user=Depends(current_user)):
     mime, _ = mimetypes.guess_type(candidate.name)
     return FileResponse(candidate, media_type=mime or "application/octet-stream", filename=candidate.name)
 
+
 @app.delete("/api/v1/files/{path:path}")
 def delete_file(path: str, user=Depends(current_user)):
     try:
@@ -457,4 +470,3 @@ def delete_file(path: str, user=Depends(current_user)):
         return {"deleted": True, "path": path}
     except (FileNotFoundError, PermissionError) as exc:
         raise HTTPException(status_code=404, detail="File not found.") from exc
-
