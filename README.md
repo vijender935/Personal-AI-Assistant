@@ -450,3 +450,23 @@ For a deployed backend, change the API base URL in `frontend/src/main.jsx`.
       Groq LLM
 
 Phase 10 is intentionally frontend-first. Authentication, persistent user accounts, file uploads, streaming responses, and richer profile/settings are expanded in the following phases.
+
+
+## Phase 12 — Files + Multimodal Foundation
+
+Phase 12 adds an authenticated file-upload layer and frontend attachment control.
+
+### File API
+
+    POST /api/v1/files/upload
+    GET  /api/v1/files/{path}
+
+Uploads are restricted to 10 MB and stored inside the configured file sandbox. Path traversal is rejected.
+
+Supported local file handling includes text/JSON/XML preview and binary-file metadata/base64 access.
+
+### Frontend
+
+The chat composer now includes an attachment button. Selected files are uploaded through the authenticated FastAPI endpoint and the uploaded filename is added to the current composer context.
+
+This phase establishes the file pipeline. Rich vision-model prompting, PDF extraction, OCR, document previews, and image-aware chat are the next multimodal refinements.
