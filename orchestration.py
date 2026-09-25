@@ -10,6 +10,14 @@ class ExecutionPlan:
     max_tool_rounds: int
 
 
+@dataclass
+class ExecutionState:
+    round_number: int = 0
+    tool_calls: int = 0
+    consecutive_failures: int = 0
+    last_tool: str = ""
+
+
 @dataclass(frozen=True)
 class ToolResult:
     ok: bool
@@ -102,6 +110,10 @@ def validate_tool_result(result: object) -> ToolResult:
     if lowered.startswith(("tool error", "unknown tool", "error:")):
         return ToolResult(False, content, recoverable=True)
     return ToolResult(True, content)
+
+
+def should_continue_execution(state: ExecutionState, max_rounds: int) -> bool:
+    return state.round_number < max_rounds and state.consecutive_failures < 2
 
 
 def recovery_instruction(tool_name: str, result: ToolResult) -> str:
