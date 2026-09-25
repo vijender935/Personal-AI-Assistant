@@ -71,7 +71,19 @@ function App(){
    const r=await fetch(API+"/api/v1/chat/stream",{method:"POST",headers:{"Content-Type":"application/json",Authorization:"Bearer "+token},body:JSON.stringify({message,session_id:active,attachment_paths:attachments.map(a=>a.path)}),signal:controller.signal});
    if(!r.ok){const d=await r.json();update([...next.slice(0,-1),{role:"user",content:message},{role:"assistant",content:d.detail||"Request failed."}]);return}
    const reader=r.body.getReader(),decoder=new TextDecoder();let buffer="",answer="";
-   while(true){const {value,done}=await reader.read();if(done)break;buffer+=decoder.decode(value,{stream:true});const events=buffer.split("\n\n");buffer=events.pop()||"";for(const event of events){const line=event.split("\n").find(x=>x.startsWith("data: "));if(!line)continue;try{const p=JSON.parse(line.slice(6));if(p.text){answer+=p.text;update([...next.slice(0,-1),{role:"user",content:message},{role:"assistant",content:answer}])}}catch(e){}}}
+   while(true){const {value,done}=await reader.read();if(done)break;buffer+=decoder.decode(value,{stream:true});const events=buffer.split("\n\n");buffer=events.pop()||"";for(const event of events){
+     const type=event.split("\n").find(x=>x.startsWith("event:"))?.slice(6).trim()||"delta";
+     const line=event.split("\n").find(x=>x.startsWith("data: "));
+     if(!line)continue;
+     try{
+       const p=JSON.parse(line.slice(6));
+       if(type==="error"){throw new Error(p.detail||"Streaming failed.")}
+       if(p.text){answer+=p.text;update([...next.slice(0,-1),{role:"user",content:message},{role:"assistant",content:answer}])}
+     }catch(e){
+       if(e.message!=="Streaming failed.")throw e;
+       update([...next.slice(0,-1),{role:"user",content:message},{role:"assistant",content:e.message}]);
+     }
+    }}
   }catch(e){if(e.name!=="AbortError")update([...next.slice(0,-1),{role:"user",content:message},{role:"assistant",content:"Backend se connection nahi ho paaya."}])}
   finally{setLoading(false);setStreamController(null);setAttachments([]);}
  }
