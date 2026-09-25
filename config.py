@@ -9,6 +9,7 @@ FILE_ROOT = Path(os.getenv("AGENT_FILE_ROOT", DATA_DIR / "files")).expanduser().
 DB_PATH = Path(os.getenv("AGENT_DB", DATA_DIR / "agent_memory.db")).expanduser().resolve()
 
 MODEL = os.getenv("GROQ_MODEL", "openai/gpt-oss-120b")
+VISION_MODEL = os.getenv("GROQ_VISION_MODEL", "qwen/qwen3.8-27b")
 MAX_ITERATIONS = max(1, int(os.getenv("MAX_ITERATIONS", "8")))
 MAX_RETRIES = max(0, int(os.getenv("MAX_RETRIES", "2")))
 MAX_HISTORY_MESSAGES = max(1, int(os.getenv("MAX_HISTORY_MESSAGES", "30")))
