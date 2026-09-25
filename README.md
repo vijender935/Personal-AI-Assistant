@@ -388,3 +388,65 @@ Phase 6 security controls remain active:
 - RAG file indexing uses the same file sandbox.
 
 The MCP layer does not bypass these controls.
+
+
+## Phase 10 — Professional Frontend
+
+A dedicated React/Vite frontend has been added under `frontend/`.
+
+### UI features
+
+- ChatGPT-style conversational layout
+- Responsive sidebar
+- New chat
+- Conversation list
+- Chat search UI
+- Model indicator
+- Message composer
+- Enter-to-send / Shift+Enter
+- Loading indicator
+- Suggested prompts
+- Settings modal
+- Profile entry point
+- Mobile-responsive layout
+- Direct connection to the Phase 7 FastAPI chat endpoint
+
+### Run the frontend
+
+From the repository root:
+
+    cd frontend
+    npm install
+    npm run dev
+
+The Vite development server normally runs on:
+
+    http://localhost:5173
+
+Make sure the FastAPI backend is also running:
+
+    uvicorn api:app --reload
+
+The frontend calls:
+
+    POST http://127.0.0.1:8000/api/v1/chat
+
+For a deployed backend, change the API base URL in `frontend/src/main.jsx`.
+
+### Frontend architecture
+
+    React/Vite
+        |
+        | HTTP + JSON
+        v
+    FastAPI
+        |
+        v
+    Agent Engine
+      / | \
+     RAG Memory Tools
+        |
+        v
+      Groq LLM
+
+Phase 10 is intentionally frontend-first. Authentication, persistent user accounts, file uploads, streaming responses, and richer profile/settings are expanded in the following phases.
