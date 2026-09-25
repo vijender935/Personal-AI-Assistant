@@ -23,7 +23,7 @@ init_auth_db()
 
 app = FastAPI(
     title="Personal AI Assistant API",
-    version="0.7.0",
+    version="0.8.0",
     description="REST API for the Personal AI Assistant agent engine.",
 )
 
@@ -125,7 +125,7 @@ def health():
 def info():
     return {
         "name": "Personal AI Assistant",
-        "version": "0.7.0",
+        "version": "0.8.0",
         "model": MODEL,
         "shell_enabled": ALLOW_SHELL,
     }
@@ -139,7 +139,8 @@ def chat(request: ChatRequest, user=Depends(current_user)):
     try:
         answer = run_agent(
             request.message,
-            session_id=request.session_id,
+            session_id=f"user-{user["id"]}-{request.session_id}",
+            user_id=user["id"],
             verbose=False,
         )
     except Exception as exc:
@@ -157,14 +158,14 @@ def chat(request: ChatRequest, user=Depends(current_user)):
 
 @app.post("/api/v1/memories", response_model=MemoryResponse)
 def create_memory(request: MemoryRequest, user=Depends(current_user)):
-    remember_fact(request.fact, source=request.source)
+    remember_fact(request.fact, source=request.source, user_id=user["id"])
     return MemoryResponse(saved=True, fact=request.fact)
 
 
 @app.get("/api/v1/memories")
-def list_memories(limit: int = 50):
+def list_memories(limit: int = 50, user=Depends(current_user)):
     limit = max(1, min(limit, 100))
-    return {"memories": recall_memories("", limit=limit)}
+    return {"memories": recall_memories("", limit=limit, user_id=user["id"])}
 
 
 @app.get("/api/v1/memories/search")
@@ -172,7 +173,7 @@ def search_memories(q: str, limit: int = 8):
     if not q.strip():
         raise HTTPException(status_code=400, detail="Query cannot be empty.")
     limit = max(1, min(limit, 50))
-    return {"query": q, "memories": recall_memories(q, limit=limit)}
+    return {"query": q, "memories": recall_memories(q, limit=limit, user_id=user["id"])}
 
 
 class RAGDocumentRequest(BaseModel):
@@ -181,18 +182,18 @@ class RAGDocumentRequest(BaseModel):
 
 
 @app.post("/api/v1/rag/documents")
-def create_rag_document(request: RAGDocumentRequest):
+def create_rag_document(request: RAGDocumentRequest, user=Depends(current_user)):
     try:
-        added = index_document(request.source, request.content)
+        added = index_document(request.source, request.content, user_id=user["id"])
     except Exception as exc:
         raise HTTPException(status_code=500, detail=str(exc)) from exc
     return {"source": request.source, "chunks_added": added}
 
 
 @app.post("/api/v1/rag/files")
-def create_rag_file(path: str):
+def create_rag_file(path: str, user=Depends(current_user)):
     try:
-        added = index_file(path)
+        added = index_file(path, user_id=user["id"])
     except FileNotFoundError:
         raise HTTPException(status_code=404, detail="File not found.")
     except PermissionError as exc:
@@ -203,11 +204,11 @@ def create_rag_file(path: str):
 
 
 @app.get("/api/v1/rag/search")
-def rag_search(q: str, limit: int = 5):
+def rag_search(q: str, limit: int = 5, user=Depends(current_user)):
     if not q.strip():
         raise HTTPException(status_code=400, detail="Query cannot be empty.")
     try:
-        return {"query": q, "results": search_rag(q, limit=limit)}
+        return {"query": q, "results": search_rag(q, limit=limit, user_id=user["id"])}
     except Exception as exc:
         raise HTTPException(status_code=500, detail=str(exc)) from exc
 
@@ -220,7 +221,7 @@ async def upload_file(file: UploadFile = File(...), user=Depends(current_user)):
     if len(content) > 10 * 1024 * 1024:
         raise HTTPException(status_code=413, detail="File is larger than 10 MB.")
     try:
-        path = save_upload(file.filename, content)
+        path = save_upload(file.filename, content, user_id=user["id"])
     except Exception as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc
     return {"path": path, "filename": file.filename, "content_type": file.content_type, "size": len(content)}
@@ -229,7 +230,7 @@ async def upload_file(file: UploadFile = File(...), user=Depends(current_user)):
 @app.get("/api/v1/files/{path:path}")
 def get_file(path: str, user=Depends(current_user)):
     try:
-        return read_upload(path)
+        return read_upload(path, user_id=user["id"])
     except FileNotFoundError:
         raise HTTPException(status_code=404, detail="File not found.")
     except PermissionError as exc:
