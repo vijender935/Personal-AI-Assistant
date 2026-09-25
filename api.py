@@ -202,15 +202,19 @@ def chat_stream(request: ChatRequest, user=Depends(current_user)):
     def event_stream():
         import json
         yield "event: start\\ndata: " + json.dumps({"session_id": request.session_id}) + "\\n\\n"
-        for chunk in stream_agent(
-            request.message,
-            session_id=internal_session,
-            user_id=user["id"],
-            image_urls=attachment_urls,
-            rag_sources=rag_sources or None,
-        ):
-            yield "data: " + json.dumps({"text": chunk}, ensure_ascii=False) + "\\n\\n"
-        yield "event: done\\ndata: {}\\n\\n"
+        try:
+            for chunk in stream_agent(
+                request.message,
+                session_id=internal_session,
+                user_id=user["id"],
+                image_urls=attachment_urls,
+                rag_sources=rag_sources or None,
+            ):
+                yield "event: delta\\ndata: " + json.dumps({"text": chunk}, ensure_ascii=False) + "\\n\\n"
+            yield "event: done\\ndata: {}\\n\\n"
+        except Exception:
+            logger.exception("Streaming request failed")
+            yield "event: error\\ndata: " + json.dumps({"detail": "Streaming request failed."}) + "\\n\\n"
 
     return StreamingResponse(
         event_stream(),
