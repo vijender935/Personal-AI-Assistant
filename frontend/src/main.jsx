@@ -1,4 +1,4 @@
-import React,{useState} from "react";
+import React,{useEffect,useState} from "react";
 import {createRoot} from "react-dom/client";
 import {Menu,Plus,Search,Settings,User,Send,MessageSquare,PanelLeftClose} from "lucide-react";
 import FileUpload from "./components/FileUpload";
@@ -11,6 +11,8 @@ function App(){
  const [chats,setChats]=useState(initial),[active,setActive]=useState(1),[text,setText]=useState(""),[loading,setLoading]=useState(false),[sidebar,setSidebar]=useState(true),[settings,setSettings]=useState(false),[user,setUser]=useState(null),[auth,setAuth]=useState({email:"",password:"",name:""}),[authMode,setAuthMode]=useState("login");
  const chat=chats.find(c=>c.id===active)||chats[0];
  const token=localStorage.getItem("personal_ai_token");
+ useEffect(()=>{if(!token)return;fetch(API+"/api/v1/auth/me",{headers:{Authorization:"Bearer "+token}}).then(async r=>{if(r.ok){const d=await r.json();setUser(d.user)}else{localStorage.removeItem("personal_ai_token");setUser(null)}}).catch(()=>{});},[token]);
+ async function logout(){if(token){try{await fetch(API+"/api/v1/auth/logout",{method:"POST",headers:{Authorization:"Bearer "+token}})}catch(e){}}localStorage.removeItem("personal_ai_token");setUser(null);setChats(initial);setActive(1);setSettings(false);}
  async function loadMcp(){if(!token)return;const r=await fetch(API+"/api/v1/mcp/servers",{headers:{Authorization:"Bearer "+token}});if(r.ok){const d=await r.json();alert(d.servers.length?d.servers.map(s=>s.name+" ("+s.transport+")").join("\\n"):"No MCP servers configured.");}}
  async function authSubmit(){const path=authMode==="login"?"/api/v1/auth/login":"/api/v1/auth/register";const body=authMode==="login"?{email:auth.email,password:auth.password}:auth;const r=await fetch(API+path,{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify(body)});const d=await r.json();if(!r.ok){alert(d.detail||"Authentication failed");return;}localStorage.setItem("personal_ai_token",d.token);setUser(d.user);}
  if(!user&&!token)return <div className="auth-screen"><div className="auth-card"><div className="welcome-logo">✦</div><h1>{authMode==="login"?"Welcome back":"Create account"}</h1>{authMode==="register"&&<input placeholder="Name" value={auth.name} onChange={e=>setAuth({...auth,name:e.target.value})}/>}<input placeholder="Email" type="email" value={auth.email} onChange={e=>setAuth({...auth,email:e.target.value})}/><input placeholder="Password" type="password" value={auth.password} onChange={e=>setAuth({...auth,password:e.target.value})}/><button className="auth-submit" onClick={authSubmit}>{authMode==="login"?"Login":"Sign up"}</button><button className="auth-switch" onClick={()=>setAuthMode(authMode==="login"?"register":"login")}>{authMode==="login"?"Create an account":"Already have an account? Login"}</button></div></div>;
@@ -31,7 +33,7 @@ function App(){
    <button className="new" onClick={newChat}><Plus size={18}/>New chat</button>
    <div className="search"><Search size={16}/><input placeholder="Search chats"/></div>
    <div className="chat-list">{chats.map(c=><button className={c.id===active?"chat active":"chat"} key={c.id} onClick={()=>setActive(c.id)}><MessageSquare size={16}/><span>{c.title}</span></button>)}</div>
-   <div className="sidebar-bottom"><button onClick={()=>setSettings(true)}><Settings size={18}/>Settings</button><button onClick={loadMcp}><MessageSquare size={18}/>MCP Servers</button><button><User size={18}/>Profile</button></div>
+   <div className="sidebar-bottom"><button onClick={()=>setSettings(true)}><Settings size={18}/>Settings</button><button onClick={loadMcp}><MessageSquare size={18}/>MCP Servers</button><button onClick={()=>setSettings(true)}><User size={18}/>Profile</button><button onClick={logout}>Logout</button></div>
   </aside>}
   <main className="main">
    <header><button className="icon" onClick={()=>setSidebar(true)}><Menu size={20}/></button><span className="model">Personal AI <b>GPT-OSS 120B</b></span><button className="avatar" onClick={()=>setSettings(true)}>{user?.name?.[0]?.toUpperCase()||"V"}</button></header>
@@ -42,7 +44,7 @@ function App(){
    </section>
    <div className="composer-wrap"><div className="composer"><FileUpload onFile={async file=>{if(!token){alert("Login required");return;}const fd=new FormData();fd.append("file",file);const r=await fetch(API+"/api/v1/files/upload",{method:"POST",headers:{Authorization:"Bearer "+token},body:fd});const d=await r.json();if(!r.ok){alert(d.detail||"Upload failed");return;}setText(t=>t+(t?"\\n":"")+`Attached: ${d.filename}`);}}/><textarea value={text} onChange={e=>setText(e.target.value)} onKeyDown={e=>{if(e.key==="Enter"&&!e.shiftKey){e.preventDefault();send()}}} placeholder="Message Personal AI..." rows="1"/><button className="send" onClick={send} disabled={!text.trim()||loading}><Send size={18}/></button></div><small>Personal AI can make mistakes. Verify important information.</small></div>
   </main>
-  {settings&&<div className="overlay" onClick={()=>setSettings(false)}><div className="settings" onClick={e=>e.stopPropagation()}><div className="settings-head"><h2>Settings</h2><button onClick={()=>setSettings(false)}>×</button></div><label>API endpoint<input value={API} readOnly/></label><label>Appearance<select defaultValue="system"><option>System</option><option>Light</option><option>Dark</option></select></label><label>Model<input value="openai/gpt-oss-120b" readOnly/></label></div></div>}
+  {settings&&<div className="overlay" onClick={()=>setSettings(false)}><div className="settings" onClick={e=>e.stopPropagation()}><div className="settings-head"><h2>Settings</h2><button onClick={()=>setSettings(false)}>×</button></div><label>API endpoint<input value={API} readOnly/></label><label>Appearance<select defaultValue="system"><option>System</option><option>Light</option><option>Dark</option></select></label><label>Model<input value="openai/gpt-oss-120b" readOnly/></label><label>Account<input value={user?.email||""} readOnly/></label><button className="auth-submit" onClick={logout}>Logout</button></div></div>}
  </div>
 }
 createRoot(document.getElementById("root")).render(<App/>);
