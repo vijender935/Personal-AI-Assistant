@@ -4,7 +4,7 @@ import json,logging,os,sys,time
 from typing import Optional
 from groq import Groq
 from config import MAX_HISTORY_MESSAGES,MAX_ITERATIONS,MAX_RETRIES,MODEL,VISION_MODEL
-from orchestration import build_execution_plan, plan_prompt, plan_task
+from orchestration import build_execution_plan, plan_prompt, plan_task, recovery_instruction, validate_tool_result
 from tools import TOOL_FUNCTIONS,TOOL_SCHEMAS,init_db,load_history,semantic_recall_memories,remember_fact,save_turn
 logger=logging.getLogger(__name__)
 logging.basicConfig(level=os.getenv("LOG_LEVEL","INFO").upper(),format="%(asctime)s | %(levelname)s | %(name)s | %(message)s")
@@ -85,7 +85,18 @@ def run_agent(goal,session_id="default",user_id=0,image_urls=None,rag_sources=No
             except Exception as exc:
                 logger.exception("Tool failed: %s",name)
                 result=f"Tool error in {name}: {exc}"
-            messages.append({"role":"tool","tool_call_id":call.id,"name":name,"content":str(result)})
+            validated = validate_tool_result(result)
+            messages.append({
+                "role": "tool",
+                "tool_call_id": call.id,
+                "name": name,
+                "content": validated.content,
+            })
+            if not validated.ok:
+                messages.append({
+                    "role": "system",
+                    "content": recovery_instruction(name, validated),
+                })
     return f"⚠️ Max tool iterations ({MAX_ITERATIONS}) reached — task incomplete reh gaya."
 def stream_agent(goal,session_id="default",user_id=0,image_urls=None,rag_sources=None):
     """Yield assistant text chunks using Groq streaming.
