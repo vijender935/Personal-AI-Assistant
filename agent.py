@@ -4,7 +4,7 @@ import json, logging, os, sys, time
 from typing import Optional
 from groq import Groq
 from config import MAX_HISTORY_MESSAGES, MAX_ITERATIONS, MAX_RETRIES, MODEL
-from tools import TOOL_FUNCTIONS, TOOL_SCHEMAS, init_db, load_history, recall_memories, remember_fact, save_turn
+from tools import TOOL_FUNCTIONS, TOOL_SCHEMAS, init_db, load_history, semantic_recall_memories, remember_fact, save_turn
 
 logger = logging.getLogger(__name__)
 logging.basicConfig(level=os.getenv("LOG_LEVEL","INFO").upper(), format="%(asctime)s | %(levelname)s | %(name)s | %(message)s")
@@ -24,11 +24,25 @@ def _extract_memory_candidate(text: str) -> Optional[str]:
     return None
 
 def build_messages(goal: str, session_id: str) -> list[dict]:
-    history, memories = load_history(session_id, MAX_HISTORY_MESSAGES), recall_memories(goal, limit=8)
+    history = load_history(session_id, MAX_HISTORY_MESSAGES)
+    memories = semantic_recall_memories(goal, limit=8)
     messages = [{"role":"system","content":SYSTEM_PROMPT}]
     if memories:
-        messages.append({"role":"system","content":"Relevant saved memories:\n" + "\n".join(f"- {m}" for m in memories)})
-    messages.extend(history); messages.append({"role":"user","content":goal}); return messages
+        messages.append({"role":"system","content":"Relevant saved memories (semantic retrieval):\n" + "\n".join(f"- {m}" for m in memories)})
+    try:
+        from memory import search_rag
+        rag_results = search_rag(goal, limit=4)
+    except Exception:
+        rag_results = []
+    if rag_results:
+        context = "\n\n".join(
+            f"[{item['source']} | score={item['score']}]\n{item['content']}"
+            for item in rag_results
+        )
+        messages.append({"role":"system","content":"Relevant knowledge-base context:\n" + context})
+    messages.extend(history)
+    messages.append({"role":"user","content":goal})
+    return messages
 
 def run_agent(goal: str, session_id: str = "default", verbose: bool = True) -> str:
     goal = goal.strip()
@@ -36,7 +50,13 @@ def run_agent(goal: str, session_id: str = "default", verbose: bool = True) -> s
     api_key = os.getenv("GROQ_API_KEY")
     if not api_key: return "❌ GROQ_API_KEY set nahi hai. README.md dekho setup ke liye."
     explicit_memory = _extract_memory_candidate(goal)
-    if explicit_memory: remember_fact(explicit_memory, source="user-explicit")
+    if explicit_memory:
+        remember_fact(explicit_memory, source="user-explicit")
+        try:
+            from memory import remember_semantic
+            remember_semantic(explicit_memory, source="user-explicit")
+        except Exception as exc:
+            logger.warning("Semantic memory unavailable: %s", exc)
     client, messages = Groq(api_key=api_key), build_messages(goal, session_id)
 
     for _ in range(MAX_ITERATIONS):
