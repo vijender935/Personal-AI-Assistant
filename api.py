@@ -213,7 +213,13 @@ def create_rag_document(request: RAGDocumentRequest, user=Depends(current_user))
 @app.post("/api/v1/rag/files")
 def create_rag_file(path: str, user=Depends(current_user)):
     try:
-        candidate = _safe_path(path, user["id"])\n        if not is_supported_document(candidate):\n            raise ValueError("Unsupported document type.")\n        document_text = extract_and_limit(candidate)\n        user_root = (FILE_ROOT / f"user_{user["id"]}").resolve()\n        source = str(candidate.relative_to(user_root))\n        added = index_document(source, document_text, user_id=user["id"], replace_source=True)
+        candidate = _safe_path(path, user["id"])
+        if not is_supported_document(candidate):
+            raise ValueError("Unsupported document type.")
+        document_text = extract_and_limit(candidate)
+        user_root = (FILE_ROOT / f"user_{user['id']}").resolve()
+        source = str(candidate.relative_to(user_root))
+        added = index_document(source, document_text, user_id=user["id"], replace_source=True)
     except FileNotFoundError:
         raise HTTPException(status_code=404, detail="File not found.")
     except PermissionError as exc:
@@ -221,69 +227,3 @@ def create_rag_file(path: str, user=Depends(current_user)):
     except Exception as exc:
         raise HTTPException(status_code=500, detail=str(exc)) from exc
     return {"path": path, "chunks_added": added}
-
-
-@app.get("/api/v1/rag/search")
-def rag_search(q: str, limit: int = 5, user=Depends(current_user)):
-    if not q.strip():
-        raise HTTPException(status_code=400, detail="Query cannot be empty.")
-    try:
-        return {"query": q, "results": search_rag(q, limit=limit, user_id=user["id"])}
-    except Exception as exc:
-        raise HTTPException(status_code=500, detail=str(exc)) from exc
-
-
-@app.post("/api/v1/files/upload")
-async def upload_file(file: UploadFile = File(...), user=Depends(current_user)):
-    if not file.filename:
-        raise HTTPException(status_code=400, detail="Filename is required.")
-    content = await file.read()
-    if len(content) > 10 * 1024 * 1024:
-        raise HTTPException(status_code=413, detail="File is larger than 10 MB.")
-    try:
-        path = save_upload(file.filename, content, user_id=user["id"])
-        indexed_chunks=0
-        candidate=_safe_path(path,user["id"])
-        if is_supported_document(candidate):
-            document_text=extract_and_limit(candidate)
-            indexed_chunks=index_document(path,document_text,user_id=user["id"],replace_source=True)
-    except ValueError as exc:
-        raise HTTPException(status_code=400, detail=str(exc)) from exc
-    except Exception as exc:
-        raise HTTPException(status_code=400, detail=str(exc)) from exc
-    return {"path": path, "filename": file.filename, "content_type": file.content_type, "size": len(content), "indexed_chunks": indexed_chunks}
-
-
-@app.get("/api/v1/files/{path:path}")
-def get_file(path: str, user=Depends(current_user)):
-    try:
-        return read_upload(path, user_id=user["id"])
-    except FileNotFoundError:
-        raise HTTPException(status_code=404, detail="File not found.")
-    except PermissionError as exc:
-        raise HTTPException(status_code=403, detail=str(exc))
-
-@app.get("/api/v1/mcp/servers")
-def mcp_servers(user=Depends(current_user)):
-    return {"servers": registry_snapshot()}
-
-@app.get("/api/v1")
-def api_root():
-    return {
-        "service": "Personal AI Assistant API",
-        "version": "0.10.0",
-        "endpoints": [
-            "GET /health",
-            "GET /api/v1/info",
-            "POST /api/v1/chat",
-            "GET /api/v1/memories",
-            "POST /api/v1/memories",
-            "GET /api/v1/memories/search",
-            "POST /api/v1/rag/documents",
-            "POST /api/v1/rag/files",
-            "GET /api/v1/rag/search",
-            "POST /api/v1/files/upload",
-            "GET /api/v1/files/{path}",
-            "GET /api/v1/mcp/servers",
-        ],
-    }
