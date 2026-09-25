@@ -249,3 +249,75 @@ This prepares the backend for a future React/Next.js frontend.
     pytest -q
 
 Phase 7 adds API-level tests for health, service info, memory operations, and missing API-key handling.
+
+
+## Phase 8 — Semantic Memory + RAG
+
+Phase 8 upgrades keyword-only memory to local semantic retrieval and adds a lightweight document RAG layer.
+
+### Semantic memory
+
+Explicitly saved memories are embedded with:
+
+    sentence-transformers/all-MiniLM-L6-v2
+
+Embeddings are stored in SQLite. New messages retrieve semantically similar memories using cosine similarity rather than only matching words.
+
+### Local RAG
+
+Text documents can be chunked, embedded, stored in SQLite, and retrieved by semantic similarity.
+
+Index a text document directly:
+
+    POST /api/v1/rag/documents
+
+Example body:
+
+    {
+      "source": "notes/knowledge.txt",
+      "content": "Your knowledge-base text..."
+    }
+
+Index a file inside AGENT_FILE_ROOT:
+
+    POST /api/v1/rag/files?path=notes/knowledge.txt
+
+Search the knowledge base:
+
+    GET /api/v1/rag/search?q=your%20question
+
+When relevant RAG chunks exist, the agent adds them to the model context before generating its answer.
+
+### Phase 8 architecture
+
+    User message
+         |
+         v
+       Agent
+      /  |  \
+     /   |   \
+ History Memory RAG
+   |      |     |
+ SQLite  SQLite SQLite
+          \     /
+           \   /
+        Relevant context
+              |
+              v
+           Groq LLM
+
+### Install
+
+Phase 8 adds:
+
+    sentence-transformers
+    numpy
+
+Run:
+
+    pip install -r requirements.txt
+    pytest -q
+
+The embedding model is loaded lazily. The first semantic-memory or RAG operation may download the model and take longer than later requests.
+
+The first implementation intentionally uses SQLite instead of requiring a separate vector database, keeping the local RAG stack simple and free for personal-scale datasets.
