@@ -34,12 +34,14 @@ def _server_target(config):
     if config.transport == "streamable-http":
         if not config.url:
             raise ValueError(f"MCP server {config.name!r} has no URL.")
-        return config.url
+        from connectors import validate_connector_url
+        return validate_connector_url(config.url, resolve_dns=True)
     if config.transport == "sse":
         if not config.url:
             raise ValueError(f"MCP server {config.name!r} has no URL.")
         from mcp.client.sse import sse_client
-        return sse_client(config.url)
+        from connectors import validate_connector_url
+        return sse_client(validate_connector_url(config.url, resolve_dns=True))
     if config.transport == "stdio":
         if not config.command:
             raise ValueError(f"MCP server {config.name!r} has no command.")
