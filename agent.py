@@ -4,7 +4,7 @@ import json,logging,os,sys,time
 from typing import Optional
 from groq import Groq
 from config import MAX_HISTORY_MESSAGES,MAX_ITERATIONS,MAX_RETRIES,MODEL,VISION_MODEL
-from orchestration import ExecutionState, build_execution_plan, plan_prompt, plan_task, recovery_instruction, should_continue_execution, validate_tool_result
+from orchestration import ExecutionState, build_execution_plan, plan_prompt, plan_task, recovery_instruction, select_mcp_tools, should_continue_execution, validate_tool_result
 from tools import TOOL_FUNCTIONS,TOOL_SCHEMAS,init_db,load_history,semantic_recall_memories,remember_fact,save_turn
 logger=logging.getLogger(__name__)
 logging.basicConfig(level=os.getenv("LOG_LEVEL","INFO").upper(),format="%(asctime)s | %(levelname)s | %(name)s | %(message)s")
@@ -50,7 +50,7 @@ def run_agent(goal,session_id="default",user_id=0,image_urls=None,rag_sources=No
     mcp_schemas=[]
     try:
         from mcp_client import discover_tool_schemas
-        mcp_schemas=discover_tool_schemas()
+        mcp_schemas=select_mcp_tools(discover_tool_schemas(), goal, max_tools=12)
     except Exception as exc:
         logger.warning("MCP discovery unavailable: %s",exc)
     tool_schemas=TOOL_SCHEMAS+mcp_schemas
