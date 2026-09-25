@@ -16,6 +16,7 @@ function App(){
 
  useEffect(()=>{if(!token)return;fetch(API+"/api/v1/auth/me",{headers:{Authorization:"Bearer "+token}}).then(async r=>{if(r.ok)setUser((await r.json()).user);else{localStorage.removeItem("personal_ai_token");setUser(null)}}).catch(()=>{});},[token]);
  useEffect(()=>{if(!token||!user)return;fetch(API+"/api/v1/chats",{headers:{Authorization:"Bearer "+token}}).then(async r=>{if(!r.ok)return;const d=await r.json();if(d.chats?.length){const normalized=d.chats.map(c=>({...c,id:c.session_id}));setChats(normalized);setActive(normalized[0].id)}}).catch(()=>{});},[token,user]);
+ useEffect(()=>{if(!token||!user||!active||active==="new")return;let cancelled=false;fetch(API+"/api/v1/chats/"+encodeURIComponent(active),{headers:{Authorization:"Bearer "+token}}).then(async r=>{if(!r.ok)return;const d=await r.json();if(cancelled)return;setChats(cs=>cs.map(c=>c.id===active?{...c,messages:d.messages||[]}:c));}).catch(()=>{});return()=>{cancelled=true}},[active,token,user]);
 
  async function loadFiles(){if(!token)return;const r=await fetch(API+"/api/v1/files",{headers:{Authorization:"Bearer "+token}});if(r.ok)setFiles((await r.json()).files||[]);}
  async function loadConnectors(){if(!token)return;const r=await fetch(API+"/api/v1/mcp/connectors",{headers:{Authorization:"Bearer "+token}});if(r.ok)setConnectors((await r.json()).connectors||[]);}
@@ -62,8 +63,9 @@ function App(){
   if(!confirm("Delete this chat?"))return;
   const r=await fetch(API+"/api/v1/chats/"+encodeURIComponent(id),{method:"DELETE",headers:{Authorization:"Bearer "+token}});
   if(!r.ok){alert("Delete failed");return}
-  setChats(cs=>cs.filter(c=>c.id!==id));
-  if(active===id){setActive(chats.find(c=>c.id!==id)?.id||"new")}
+  const remaining=chats.filter(c=>c.id!==id);
+  setChats(remaining.length?remaining:[{id:"new",title:"New conversation",messages:[]}]);
+  if(active===id)setActive(remaining[0]?.id||"new");
  }
  async function copyMessage(content,index){try{await navigator.clipboard.writeText(content);setCopiedMessage(index);setTimeout(()=>setCopiedMessage(null),1500)}catch(e){}}
  function newChat(){const id="web-"+Date.now();setChats(cs=>[{id,title:"New conversation",messages:[]},...cs]);setActive(id);setAttachments([]);}
