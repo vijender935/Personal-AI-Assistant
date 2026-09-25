@@ -8,3 +8,4 @@ httpx
 sentence-transformers
 numpy
 mcp>=2,<3
+python-multipart
