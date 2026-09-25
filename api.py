@@ -416,6 +416,15 @@ async def upload_file(file: UploadFile = File(...), user=Depends(current_user)):
         return {"path": path, "name": candidate.name, "size": len(content), "indexed_chunks": indexed_chunks}
     except ValueError as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc
+    except RuntimeError as exc:
+        return {
+            "path": path,
+            "name": candidate.name,
+            "size": len(content),
+            "indexed_chunks": 0,
+            "indexing_skipped": True,
+            "reason": str(exc),
+        }
 
 
 @app.get("/api/v1/files")
