@@ -13,7 +13,7 @@ def test_file_access_is_sandboxed(tmp_path, monkeypatch):
     assert tools.read_file("hello.txt") == "world"
     outside = tmp_path / "outside.txt"
     outside.write_text("secret")
-    assert "outside the allowed file root" in tools.read_file("../outside.txt")
+    assert "outside the user" in tools.read_file("../outside.txt")
 
 def test_shell_disabled(monkeypatch):
     monkeypatch.setattr(tools, "ALLOW_SHELL", False)
