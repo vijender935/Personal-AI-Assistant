@@ -4,9 +4,10 @@ from __future__ import annotations
 import os
 import time
 import logging
+import re
 from typing import Optional
 
-from fastapi import Depends, FastAPI, File, Header, HTTPException, UploadFile
+from fastapi import Depends, FastAPI, File, Header, HTTPException, UploadFile, Request
 from fastapi.responses import FileResponse, StreamingResponse
 from fastapi.middleware.cors import CORSMiddleware
 from starlette.middleware.base import BaseHTTPMiddleware
@@ -23,7 +24,7 @@ from mcp_registry import registry_snapshot
 from connectors import init_connectors_db, list_connectors, upsert_connector, delete_connector
 from document_parser import extract_and_limit, is_supported_document
 
-logger = logging.getLogger(__name__)
+logger = logging.getLogger(__name__)\n\nAUTH_RATE_LIMIT = max(1, int(os.getenv("AUTH_RATE_LIMIT", "10")))\nAUTH_RATE_WINDOW = max(1, int(os.getenv("AUTH_RATE_WINDOW", "60")))\n_auth_attempts: dict[str, list[float]] = {}\n\ndef _check_auth_rate_limit(key: str) -> None:\n    now = time.monotonic()\n    attempts = [stamp for stamp in _auth_attempts.get(key, []) if now - stamp < AUTH_RATE_WINDOW]\n    if len(attempts) >= AUTH_RATE_LIMIT:\n        raise HTTPException(status_code=429, detail="Too many authentication attempts. Try again later.")\n    attempts.append(now)\n    _auth_attempts[key] = attempts\n\ndef _client_key(request) -> str:\n    return request.client.host if request.client else "unknown"
 
 ensure_directories()
 init_db()
