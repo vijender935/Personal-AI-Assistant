@@ -43,13 +43,20 @@ def run_agent(goal,session_id="default",user_id=0,image_urls=None,rag_sources=No
             remember_semantic(explicit_memory,source="user-explicit",user_id=user_id)
         except Exception as exc:logger.warning("Semantic memory unavailable: %s",exc)
     client,messages=Groq(api_key=api_key),build_messages(goal,session_id,user_id=user_id,rag_sources=rag_sources)
+    mcp_schemas=[]
+    try:
+        from mcp_client import discover_tool_schemas
+        mcp_schemas=discover_tool_schemas()
+    except Exception as exc:
+        logger.warning("MCP discovery unavailable: %s",exc)
+    tool_schemas=TOOL_SCHEMAS+mcp_schemas
     if image_urls:
         messages[-1]["content"]=[{"type":"text","text":goal}]+[{"type":"image_url","image_url":{"url":url}} for url in image_urls]
     for _ in range(MAX_ITERATIONS):
         response=None
         for retry in range(MAX_RETRIES+1):
             try:
-                response=client.chat.completions.create(model=VISION_MODEL if image_urls else MODEL,messages=messages,tools=TOOL_SCHEMAS,tool_choice="auto",temperature=0.4);break
+                response=client.chat.completions.create(model=VISION_MODEL if image_urls else MODEL,messages=messages,tools=tool_schemas,tool_choice="auto",temperature=0.4);break
             except Exception as exc:
                 logger.warning("Model request failed (retry %s): %s",retry,exc)
                 if retry<MAX_RETRIES:time.sleep(2**retry)
@@ -63,8 +70,17 @@ def run_agent(goal,session_id="default",user_id=0,image_urls=None,rag_sources=No
             except json.JSONDecodeError:args={}
             if verbose:logger.info("Tool call: %s(%s)",name,args)
             fn=TOOL_FUNCTIONS.get(name)
-            try:result=fn(**args) if fn else f"Unknown tool: {name}"
-            except Exception as exc:logger.exception("Tool failed: %s",name);result=f"Tool error in {name}: {exc}"
+            try:
+                if fn:
+                    result=fn(**args)
+                elif name.startswith("mcp__"):
+                    from mcp_client import call_tool
+                    result=call_tool(name,args)
+                else:
+                    result=f"Unknown tool: {name}"
+            except Exception as exc:
+                logger.exception("Tool failed: %s",name)
+                result=f"Tool error in {name}: {exc}"
             messages.append({"role":"tool","tool_call_id":call.id,"name":name,"content":str(result)})
     return f"⚠️ Max tool iterations ({MAX_ITERATIONS}) reached — task incomplete reh gaya."
 def stream_agent(goal,session_id="default",user_id=0,image_urls=None,rag_sources=None):
