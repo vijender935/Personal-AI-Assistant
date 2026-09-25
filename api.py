@@ -234,10 +234,12 @@ def get_file(path: str, user=Depends(current_user)):
         raise HTTPException(status_code=404, detail="File not found.")
     except PermissionError as exc:
         raise HTTPException(status_code=403, detail=str(exc))
-\n@app.get("/api/v1/mcp/servers")
+
+@app.get("/api/v1/mcp/servers")
 def mcp_servers(user=Depends(current_user)):
     return {"servers": registry_snapshot()}
-\n@app.get("/api/v1")
+
+@app.get("/api/v1")
 def api_root():
     return {
         "service": "Personal AI Assistant API",
@@ -251,6 +253,9 @@ def api_root():
             "GET /api/v1/memories/search",
             "POST /api/v1/rag/documents",
             "POST /api/v1/rag/files",
-            "GET /api/v1/rag/search",\n            "POST /api/v1/files/upload",\n            "GET /api/v1/files/{path}",\n            "GET /api/v1/mcp/servers",
+            "GET /api/v1/rag/search",
+            "POST /api/v1/files/upload",
+            "GET /api/v1/files/{path}",
+            "GET /api/v1/mcp/servers",
         ],
     }
