@@ -75,7 +75,7 @@ def index_file(path,user_id=0,replace_source=False):
     except ValueError as exc:raise PermissionError(f"path is outside the allowed file root: {FILE_ROOT}") from exc
     if not candidate.is_file():raise FileNotFoundError(path)
     return index_document(str(candidate.relative_to(FILE_ROOT)),candidate.read_text(encoding="utf-8",errors="replace"),user_id=user_id)
-def search_rag(query,limit=5,user_id=0,sources=None)
+def search_rag(query,limit=5,user_id=0,sources=None):
     query=query.strip()
     if not query:return []
     init_semantic_store();q=_vector(_embedding(query))
