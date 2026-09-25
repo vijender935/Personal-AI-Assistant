@@ -97,6 +97,7 @@ def search_rag(query,limit=5,user_id=0,sources=None):
     for source,chunk_index,content,blob in rows:
         v=_vector(blob)
         if len(v)==len(q):scored.append((float(q@v),source,chunk_index,content))
+    scored = [item for item in scored if item[0] > 0]
     scored.sort(key=lambda x:x[0],reverse=True)
     return [{"score":round(score,4),"source":source,"chunk_index":chunk_index,"content":content} for score,source,chunk_index,content in scored[:max(1,min(limit,10))]]
 
