@@ -4,3 +4,4 @@ gradio
 pytest
 fastapi
 uvicorn[standard]
+httpx
