@@ -470,3 +470,22 @@ Supported local file handling includes text/JSON/XML preview and binary-file met
 The chat composer now includes an attachment button. Selected files are uploaded through the authenticated FastAPI endpoint and the uploaded filename is added to the current composer context.
 
 This phase establishes the file pipeline. Rich vision-model prompting, PDF extraction, OCR, document previews, and image-aware chat are the next multimodal refinements.
+
+
+## Phase 13 — MCP Ecosystem
+
+Phase 13 adds an external MCP server registry layer.
+
+Configure external servers through the MCP_SERVERS environment variable as JSON.
+
+Example:
+
+    export MCP_SERVERS='{"local":{"transport":"stdio","command":"python","args":["server.py"]},"remote":{"transport":"streamable-http","url":"https://example.com/mcp"}}'
+
+The backend exposes the authenticated registry view at:
+
+    GET /api/v1/mcp/servers
+
+The frontend includes an MCP Servers entry that displays configured servers.
+
+The registry is intentionally configuration-only in this phase. It does not blindly execute arbitrary remote commands. This keeps external MCP connectivity opt-in while establishing the architecture for a future MCP client/tool discovery layer.
