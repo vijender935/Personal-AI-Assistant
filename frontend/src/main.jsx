@@ -6,13 +6,14 @@ import {Menu,Plus,Search,Settings,User,Send,MessageSquare,Paperclip,Files,Trash2
 import FileUpload from "./components/FileUpload";
 import Modal from "./components/Modal";
 import useChat from "./hooks/useChat";
+import useFiles from "./hooks/useFiles";
 import "./styles.css";
 
 const API=import.meta.env.VITE_API_URL || "http://127.0.0.1:8000";
 const initial=[{id:"new",title:"New conversation",messages:[]}];
 
 function App(){
- const [chats,setChats]=useState(initial),[active,setActive]=useState("new"),[text,setText]=useState(""),[loading,setLoading]=useState(false),[sidebar,setSidebar]=useState(true),[settings,setSettings]=useState(false),[filesOpen,setFilesOpen]=useState(false),[files,setFiles]=useState([]),[fileQuery,setFileQuery]=useState(""),[user,setUser]=useState(null),[auth,setAuth]=useState({email:"",password:"",name:""}),[authMode,setAuthMode]=useState("login"),[attachments,setAttachments]=useState([]),[chatQuery,setChatQuery]=useState(""),[copiedMessage,setCopiedMessage]=useState(null),[connectors,setConnectors]=useState([]),[connectorForm,setConnectorForm]=useState({name:"",transport:"streamable-http",url:"",allowed_tools:""}),[connectorLoading,setConnectorLoading]=useState(false),[memories,setMemories]=useState([]),[memoryForm,setMemoryForm]=useState(""),[memoryOpen,setMemoryOpen]=useState(false),[toast,setToast]=useState(null),[confirmState,setConfirmState]=useState(null),[editState,setEditState]=useState(null),[renameState,setRenameState]=useState(null),[uploading,setUploading]=useState(false);
+ const [chats,setChats]=useState(initial),[active,setActive]=useState("new"),[text,setText]=useState(""),[loading,setLoading]=useState(false),[sidebar,setSidebar]=useState(true),[settings,setSettings]=useState(false),[filesOpen,setFilesOpen]=useState(false),[fileQuery,setFileQuery]=useState(""),[user,setUser]=useState(null),[auth,setAuth]=useState({email:"",password:"",name:""}),[authMode,setAuthMode]=useState("login"),[attachments,setAttachments]=useState([]),[chatQuery,setChatQuery]=useState(""),[copiedMessage,setCopiedMessage]=useState(null),[connectors,setConnectors]=useState([]),[connectorForm,setConnectorForm]=useState({name:"",transport:"streamable-http",url:"",allowed_tools:""}),[connectorLoading,setConnectorLoading]=useState(false),[memories,setMemories]=useState([]),[memoryForm,setMemoryForm]=useState(""),[memoryOpen,setMemoryOpen]=useState(false),[toast,setToast]=useState(null),[confirmState,setConfirmState]=useState(null),[editState,setEditState]=useState(null),[renameState,setRenameState]=useState(null);
  const token=localStorage.getItem("personal_ai_token");
  function notify(message,type="error"){setToast({message,type});window.clearTimeout(notify.timer);notify.timer=window.setTimeout(()=>setToast(null),3200)}
 
@@ -20,7 +21,6 @@ function App(){
  useEffect(()=>{if(!token||!user)return;fetch(API+"/api/v1/chats",{headers:{Authorization:"Bearer "+token}}).then(async r=>{if(!r.ok)return;const d=await r.json();if(d.chats?.length){const normalized=d.chats.map(c=>({...c,id:c.session_id}));setChats(normalized);setActive(normalized[0].id)}}).catch(()=>{});},[token,user]);
  useEffect(()=>{if(!token||!user||!active||active==="new")return;let cancelled=false;fetch(API+"/api/v1/chats/"+encodeURIComponent(active),{headers:{Authorization:"Bearer "+token}}).then(async r=>{if(!r.ok)return;const d=await r.json();if(cancelled)return;setChats(cs=>cs.map(c=>c.id===active?{...c,messages:d.messages||[]}:c));}).catch(()=>{});return()=>{cancelled=true}},[active,token,user]);
 
- async function loadFiles(){if(!token)return;const r=await fetch(API+"/api/v1/files",{headers:{Authorization:"Bearer "+token}});if(r.ok)setFiles((await r.json()).files||[]);}
  async function loadMemories(){if(!token)return;const r=await fetch(API+"/api/v1/memories",{headers:{Authorization:"Bearer "+token}});if(r.ok)setMemories((await r.json()).memories||[]);}
  async function saveMemory(){const fact=memoryForm.trim();if(!fact)return;const r=await fetch(API+"/api/v1/memories",{method:"POST",headers:{"Content-Type":"application/json",Authorization:"Bearer "+token},body:JSON.stringify({fact,source:"settings"})});if(!r.ok){const d=await r.json();notify(d.detail||"Memory save failed");return}setMemoryForm("");await loadMemories();}
  async function deleteMemory(fact){const r=await fetch(API+"/api/v1/memories?fact="+encodeURIComponent(fact),{method:"DELETE",headers:{Authorization:"Bearer "+token}});if(r.ok)setMemories(ms=>ms.filter(x=>x!==fact));else notify("Memory delete failed");}
@@ -29,6 +29,8 @@ function App(){
  async function deleteConnectorById(id){const r=await fetch(API+"/api/v1/mcp/connectors/"+id,{method:"DELETE",headers:{Authorization:"Bearer "+token}});if(r.ok)setConnectors(cs=>cs.filter(x=>x.id!==id));else notify("Connector delete failed");}
  useEffect(()=>{if(user){loadFiles();loadConnectors();loadMemories()}},[user]);
  const {chat,regenerate,editLastUser,send,stopStream,newChat}=useChat({API,token,chats,setChats,active,setActive,text,setText,attachments,setAttachments,loading,setLoading,notify});
+ const {files,uploading,loadFiles,uploadFile,deleteFile,confirmDeleteFile,downloadFile}=useFiles({API,token,notify,setAttachments});
+
 
  async function logout(){try{if(token)await fetch(API+"/api/v1/auth/logout",{method:"POST",headers:{Authorization:"Bearer "+token}})}catch(e){}localStorage.removeItem("personal_ai_token");setUser(null);setChats(initial);setActive("new");}
  async function authSubmit(){const path=authMode==="login"?"/api/v1/auth/login":"/api/v1/auth/register";const body=authMode==="login"?{email:auth.email,password:auth.password}:auth;const r=await fetch(API+path,{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify(body)});const d=await r.json();if(!r.ok){notify(d.detail||"Authentication failed");return}localStorage.setItem("personal_ai_token",d.token);setUser(d.user);}
@@ -49,11 +51,6 @@ function App(){
   setChats(remaining.length?remaining:[{id:"new",title:"New conversation",messages:[]}]);
   if(active===id)setActive(remaining[0]?.id||"new");
  }
- async function uploadFile(file){setUploading(true);try{const fd=new FormData();fd.append("file",file);const r=await fetch(API+"/api/v1/files/upload",{method:"POST",headers:{Authorization:"Bearer "+token},body:fd});const d=await r.json();if(!r.ok){notify(d.detail||"Upload failed");return}setAttachments(a=>[...a,{path:d.path,name:d.name}]);await loadFiles();notify("File attached","success")}catch(e){notify("Upload failed")}finally{setUploading(false)}}
- async function deleteFile(path){setConfirmState({type:"file",path,message:"Delete this file? This also removes its indexed content."});}
- async function confirmDeleteFile(path){const r=await fetch(API+"/api/v1/files/"+path.split("/").map(encodeURIComponent).join("/"),{method:"DELETE",headers:{Authorization:"Bearer "+token}});if(r.ok)await loadFiles();else notify("Delete failed");}
- async function downloadFile(path){const r=await fetch(API+"/api/v1/files/"+path.split("/").map(encodeURIComponent).join("/"),{headers:{Authorization:"Bearer "+token}});if(!r.ok){notify("Download failed");return}const blob=await r.blob();const url=URL.createObjectURL(blob);window.location.href=url;}
-
  if(!user&&!token)return <div className="auth-screen"><div className="auth-card"><div className="welcome-logo">✦</div><h1>{authMode==="login"?"Welcome back":"Create account"}</h1>{authMode==="register"&&<input placeholder="Name" value={auth.name} onChange={e=>setAuth({...auth,name:e.target.value})}/>}<input placeholder="Email" type="email" value={auth.email} onChange={e=>setAuth({...auth,email:e.target.value})}/><input placeholder="Password" type="password" value={auth.password} onChange={e=>setAuth({...auth,password:e.target.value})}/><button className="auth-submit" onClick={authSubmit}>{authMode==="login"?"Login":"Sign up"}</button><button className="auth-switch" onClick={()=>setAuthMode(authMode==="login"?"register":"login")}>{authMode==="login"?"Create an account":"Already have an account? Login"}</button></div></div>;
 
  return <div className="app">
