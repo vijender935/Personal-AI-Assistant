@@ -23,7 +23,7 @@ def _allowed_servers() -> set[str] | None:
     return {item.strip() for item in raw.split(",") if item.strip()}
 
 
-def load_server_configs() -> list[MCPServerConfig]:
+def _env_server_configs() -> list[MCPServerConfig]:
     raw = os.getenv("MCP_SERVERS", "").strip()
     if not raw:
         return []
@@ -61,12 +61,36 @@ def load_server_configs() -> list[MCPServerConfig]:
     return configs
 
 
+def load_server_configs(user_id: int | None = None) -> list[MCPServerConfig]:
+    configs = _env_server_configs()
+    if user_id is None:
+        return configs
+
+    try:
+        from connectors import get_connector_configs
+        existing = {item.name for item in configs}
+        for item in get_connector_configs(user_id):
+            if item["name"] in existing:
+                continue
+            configs.append(
+                MCPServerConfig(
+                    name=item["name"],
+                    transport=item["transport"],
+                    url=item["url"],
+                    allowed_tools=tuple(item["allowed_tools"]),
+                )
+            )
+    except Exception:
+        # Connector storage must never break the normal agent startup.
+        pass
+    return configs
+
+
 def tool_allowed(config: MCPServerConfig, tool_name: str) -> bool:
-    # Empty allowlist preserves backward compatibility for explicitly configured servers.
     return not config.allowed_tools or tool_name in config.allowed_tools
 
 
-def registry_snapshot() -> list[dict[str, object]]:
+def registry_snapshot(user_id: int | None = None) -> list[dict[str, object]]:
     return [
         {
             "name": item.name,
@@ -76,5 +100,5 @@ def registry_snapshot() -> list[dict[str, object]]:
             "url": item.url,
             "allowed_tools": list(item.allowed_tools),
         }
-        for item in load_server_configs()
+        for item in load_server_configs(user_id)
     ]
