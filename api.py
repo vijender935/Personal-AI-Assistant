@@ -14,7 +14,7 @@ from pydantic import BaseModel, Field
 
 from agent import MODEL, VISION_MODEL, run_agent, stream_agent
 from config import ALLOW_SHELL, FILE_ROOT, ensure_directories
-from tools import init_db, recall_memories, remember_fact, load_history, list_sessions, set_chat_title, get_chat_title, delete_chat, remove_last_assistant, remove_last_turn
+from tools import init_db, recall_memories, remember_fact, load_history, list_sessions, set_chat_title, get_chat_title, delete_chat, remove_last_assistant, remove_last_turn, save_turn
 from memory import index_document, search_rag, rag_source_status
 from auth import authenticate, create_session, create_user, get_user, init_auth_db, revoke_session
 from multimodal import save_upload, read_upload, image_data_url, _safe_path
