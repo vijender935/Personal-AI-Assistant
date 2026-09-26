@@ -228,13 +228,14 @@ def stream_agent(goal, session_id="default", user_id=0, image_urls=None, rag_sou
         response = None
         for retry in range(MAX_RETRIES + 1):
             try:
-                response = client.chat.completions.create(
-                    model=VISION_MODEL if image_urls else MODEL,
-                    messages=messages,
-                    tools=tool_schemas,
-                    tool_choice="auto",
-                    temperature=0.4,
-                )
+                request_kwargs = {
+                    "model": VISION_MODEL if image_urls else MODEL,
+                    "messages": messages,
+                    "temperature": 0.4,
+                }
+                if tool_schemas:
+                    request_kwargs.update({"tools": tool_schemas, "tool_choice": "auto"})
+                response = client.chat.completions.create(**request_kwargs)
                 break
             except Exception as exc:
                 logger.warning("Streaming preparation request failed (retry %s): %s", retry, exc)
