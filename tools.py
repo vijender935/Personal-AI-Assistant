@@ -35,8 +35,15 @@ def save_turn(session_id,user_text,assistant_text,user_id=0):
         con.execute("INSERT INTO messages(session_id,role,content,user_id) VALUES(?,?,?,?)",(session_id,"user",user_text,user_id)); con.execute("INSERT INTO messages(session_id,role,content,user_id) VALUES(?,?,?,?)",(session_id,"assistant",assistant_text,user_id))
 def load_history(session_id,limit=30,user_id=0):
     limit=max(1,int(limit))
-    with connect(DB_PATH) as con: rows=con.execute("SELECT role,content FROM messages WHERE session_id=? AND user_id=? ORDER BY id DESC LIMIT ?",(session_id,user_id,limit)).fetchall()
-    return [{"role":r,"content":c} for r,c in reversed(rows)]
+    with connect(DB_PATH) as con:
+        rows=con.execute("SELECT role,content FROM messages WHERE session_id=? AND user_id=? ORDER BY id DESC LIMIT ?",(session_id,user_id,limit)).fetchall()
+    history=[]
+    for role,content in reversed(rows):
+        item={"role":role,"content":content}
+        if history and history[-1]["role"]==role and history[-1]["content"]==content:
+            continue
+        history.append(item)
+    return history
 def list_sessions(user_id=0,limit=50):
     limit=max(1,min(int(limit),100))
     with connect(DB_PATH) as con: rows=con.execute("SELECT session_id,MAX(id) AS last_id FROM messages WHERE user_id=? GROUP BY session_id ORDER BY last_id DESC LIMIT ?",(user_id,limit)).fetchall()
