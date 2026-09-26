@@ -1,6 +1,6 @@
 import {useCallback,useState} from "react";
 
-export const emptyForm={name:"",transport:"streamable-http",url:"",allowed_tools:""};
+export const emptyForm={name:"",transport:"streamable-http",url:"",allowed_tools:"",headers:""};
 
 async function responseDetail(response,fallback){
  try{const data=await response.json();return data.detail||fallback}catch{return fallback}
@@ -32,14 +32,15 @@ export default function useMCP({API,token,notify}){
      name:connectorForm.name.trim(),
      transport:connectorForm.transport,
      url:connectorForm.url.trim(),
-     allowed_tools:connectorForm.allowed_tools.split(",").map(x=>x.trim()).filter(Boolean)
+     allowed_tools:connectorForm.allowed_tools.split(",").map(x=>x.trim()).filter(Boolean),
+     headers:connectorForm.headers.trim()?JSON.parse(connectorForm.headers):{}
     })
    });
    const d=await r.json().catch(()=>({}));
    if(!r.ok){notify(d.detail||"Connector add failed");return}
    setConnectors(cs=>[...cs.filter(x=>x.id!==d.connector.id),d.connector]);
    setConnectorForm(emptyForm);
-  }catch{notify("Connector add failed")}
+  }catch(e){notify(e instanceof SyntaxError?"Headers must be valid JSON.":"Connector add failed")}
   finally{setConnectorLoading(false)}
  }
 
