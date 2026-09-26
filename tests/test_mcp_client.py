@@ -77,3 +77,33 @@ def test_mcp_connector_header_persistence(monkeypatch, tmp_path):
     assert connector["headers"]["X-MCP-Toolsets"] == "repos"
     updated = connectors.upsert_connector(1, "github", "streamable-http", "https://example.com/mcp", headers={"Authorization": "Bearer new"})
     assert updated["headers"] == {"Authorization": "Bearer new"}
+
+
+def test_mcp_connector_config_keeps_identity(monkeypatch):
+    import mcp_registry
+    monkeypatch.setattr(
+        mcp_registry,
+        "get_connector_configs",
+        lambda user_id: [{
+            "id": 42,
+            "name": "github",
+            "transport": "streamable-http",
+            "url": "https://example.com/mcp",
+            "headers": {},
+            "allowed_tools": [],
+            "enabled": True,
+        }],
+    )
+    monkeypatch.setenv("MCP_SERVERS", "")
+    config = mcp_registry.load_server_configs(7)[0]
+    assert config.user_id == 7
+    assert config.connector_id == 42
+
+
+def test_mcp_oauth_storage_starts_empty(monkeypatch, tmp_path):
+    import mcp_oauth
+    monkeypatch.setattr(mcp_oauth, "DB_PATH", str(tmp_path / "oauth.sqlite3"))
+    monkeypatch.setattr(mcp_oauth, "ensure_directories", lambda: None)
+    monkeypatch.setattr(mcp_oauth, "using_postgres", lambda: False)
+    assert not mcp_oauth.oauth_token_present(7, 42)
+    assert mcp_oauth.oauth_status(7, 42)["connected"] is False
