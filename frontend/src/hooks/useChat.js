@@ -1,4 +1,4 @@
-import {useState} from "react";
+import {useRef,useState} from "react";
 import {parseSSEEvent} from "../utils/sse";
 
 export function responseDetailFromPayload(data,fallback){
@@ -16,7 +16,7 @@ export function getEditableLastUser(messages){
 }
 
 export default function useChat({API,token,chats,setChats,active,setActive,text,setText,attachments,setAttachments,loading,setLoading,notify,webSearch,memory}){
- const [streamController,setStreamController]=useState(null);
+ const [streamController,setStreamController]=useState(null);\n const sendingRef=useRef(false);
  const chat=chats.find(c=>c.id===active)||chats[0];
 
  function update(messages){
@@ -63,10 +63,10 @@ export default function useChat({API,token,chats,setChats,active,setActive,text,
    if(!answer)update([...next.slice(0,-1),{role:"user",content:message},{role:"assistant",content:"No response received."}]);
   }catch(e){
    if(e.name!=="AbortError")update([...next.slice(0,-1),{role:"user",content:message},{role:"assistant",content:e.message||"Streaming failed."}]);
-  }finally{setLoading(false);setStreamController(null);setAttachments([])}
+  }finally{sendingRef.current=false;setLoading(false);setStreamController(null);setAttachments([])}
  }
 
- function stopStream(){streamController?.abort();setStreamController(null);setLoading(false)}
+ function stopStream(){if(!sendingRef.current)return;streamController?.abort();sendingRef.current=false;setStreamController(null);setLoading(false)}
  function newChat(){
   const id="web-"+Date.now();setChats(cs=>[{id,title:"New conversation",messages:[]},...cs]);setActive(id);setAttachments([]);
   if(window.innerWidth<701)window.dispatchEvent(new Event("chat:new"));
