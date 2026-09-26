@@ -10,6 +10,11 @@ MAX_MEMORY_SCAN=500
 def init_db():
     ensure_directories()
     with connect(DB_PATH) as con:
+        # Authentication is intentionally removed from this single-user app.
+        try: con.execute("DROP TABLE IF EXISTS auth_sessions")
+        except Exception: pass
+        try: con.execute("DROP TABLE IF EXISTS users")
+        except Exception: pass
         if using_postgres():
             con.execute("""CREATE TABLE IF NOT EXISTS messages(id BIGSERIAL PRIMARY KEY,session_id TEXT NOT NULL,role TEXT NOT NULL,content TEXT NOT NULL,created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP)""")
             con.execute("""CREATE TABLE IF NOT EXISTS memories(id BIGSERIAL PRIMARY KEY,fact TEXT NOT NULL UNIQUE,source TEXT,created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP)""")
