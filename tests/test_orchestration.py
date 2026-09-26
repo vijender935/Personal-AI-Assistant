@@ -52,7 +52,7 @@ def test_execution_plan_orders_routes():
     assert "web_or_current_information" in execution.steps
     assert "mcp_tool_execution" in execution.steps
     assert execution.steps[-2:] == ("validate_tool_results", "compose_answer")
-    assert execution.max_tool_rounds == 4
+    assert execution.max_tool_rounds == 8
 
 
 
