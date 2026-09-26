@@ -2,8 +2,8 @@
 from __future__ import annotations
 import ipaddress, json, os, socket
 from urllib.parse import urlparse
-from config import DB_PATH, ensure_directories
-from db import connect, using_postgres
+from config import ensure_directories
+from db import connect
 
 def _is_private_or_local(host: str, resolve_dns: bool = True) -> bool:
     host = host.strip("[]").lower()
@@ -48,39 +48,24 @@ def validate_connector_url(url: str, *, resolve_dns: bool = True) -> str:
 
 def init_connectors_db():
     ensure_directories()
-    with connect(DB_PATH) as con:
-        if using_postgres():
-            con.execute("""CREATE TABLE IF NOT EXISTS mcp_connectors(
-                id BIGSERIAL PRIMARY KEY,name TEXT NOT NULL UNIQUE,transport TEXT NOT NULL,url TEXT NOT NULL,
-                allowed_tools TEXT NOT NULL DEFAULT '[]',enabled BOOLEAN NOT NULL DEFAULT TRUE,
-                headers TEXT NOT NULL DEFAULT '{}',created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP)""")
-        else:
-            con.execute("""CREATE TABLE IF NOT EXISTS mcp_connectors(
-                id INTEGER PRIMARY KEY AUTOINCREMENT,name TEXT NOT NULL UNIQUE,transport TEXT NOT NULL,url TEXT NOT NULL,
-                allowed_tools TEXT NOT NULL DEFAULT '[]',enabled INTEGER NOT NULL DEFAULT 1,
-                headers TEXT NOT NULL DEFAULT '{}',created_at DATETIME DEFAULT CURRENT_TIMESTAMP)""")
+    with connect() as con:
+        con.execute("""CREATE TABLE IF NOT EXISTS mcp_connectors(
+            id BIGSERIAL PRIMARY KEY,name TEXT NOT NULL UNIQUE,transport TEXT NOT NULL,url TEXT NOT NULL,
+            allowed_tools TEXT NOT NULL DEFAULT '[]',enabled BOOLEAN NOT NULL DEFAULT TRUE,
+            headers TEXT NOT NULL DEFAULT '{}',created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP)""")
 
 def _migrate_legacy_schema():
-    """Remove legacy user-scoping from an existing personal database."""
-    with connect(DB_PATH) as con:
+    """Remove legacy user-scoping from an existing PostgreSQL database."""
+    with connect() as con:
         try:
-            cols = [row[1] for row in con.execute("PRAGMA table_info(mcp_connectors)")]
+            con.execute("DROP INDEX IF EXISTS mcp_connectors_user_id_name_key")
+            con.execute("ALTER TABLE mcp_connectors DROP COLUMN IF EXISTS user_id")
         except Exception:
-            cols = []
-        if "user_id" in cols:
-            if using_postgres():
-                try: con.execute("ALTER TABLE mcp_connectors DROP CONSTRAINT IF EXISTS mcp_connectors_user_id_name_key")
-                except Exception: pass
-                con.execute("ALTER TABLE mcp_connectors DROP COLUMN IF EXISTS user_id")
-            else:
-                con.execute("CREATE TABLE IF NOT EXISTS mcp_connectors_new(id INTEGER PRIMARY KEY AUTOINCREMENT,name TEXT NOT NULL UNIQUE,transport TEXT NOT NULL,url TEXT NOT NULL,allowed_tools TEXT NOT NULL DEFAULT '[]',enabled INTEGER NOT NULL DEFAULT 1,headers TEXT NOT NULL DEFAULT '{}',created_at DATETIME DEFAULT CURRENT_TIMESTAMP)")
-                con.execute("INSERT OR IGNORE INTO mcp_connectors_new(id,name,transport,url,allowed_tools,enabled,headers,created_at) SELECT id,name,transport,url,allowed_tools,enabled,headers,created_at FROM mcp_connectors")
-                con.execute("DROP TABLE mcp_connectors")
-                con.execute("ALTER TABLE mcp_connectors_new RENAME TO mcp_connectors")
+            pass
 
 def list_connectors(*, redact_headers=False):
     init_connectors_db(); _migrate_legacy_schema()
-    with connect(DB_PATH) as con:
+    with connect() as con:
         rows=con.execute("SELECT id,name,transport,url,headers,allowed_tools,enabled,created_at FROM mcp_connectors ORDER BY name").fetchall()
     result=[]
     for connector_id,name,transport,url,headers,allowed_tools,enabled,created_at in rows:
@@ -115,7 +100,7 @@ def upsert_connector(name,transport,url,allowed_tools=None,headers=None):
             header_map[key]=value
     if len(header_map)>30: raise ValueError("Too many MCP headers.")
     init_connectors_db(); _migrate_legacy_schema()
-    with connect(DB_PATH) as con:
+    with connect() as con:
         if using_postgres():
             con.execute("""INSERT INTO mcp_connectors(name,transport,url,headers,allowed_tools,enabled)
                 VALUES(?,?,?,?,?,TRUE) ON CONFLICT(name) DO UPDATE SET transport=excluded.transport,url=excluded.url,headers=excluded.headers,allowed_tools=excluded.allowed_tools,enabled=TRUE""",
@@ -128,6 +113,6 @@ def upsert_connector(name,transport,url,allowed_tools=None,headers=None):
 
 def delete_connector(connector_id):
     init_connectors_db(); _migrate_legacy_schema()
-    with connect(DB_PATH) as con:
+    with connect() as con:
         cur=con.execute("DELETE FROM mcp_connectors WHERE id=?",(connector_id,))
     return cur.rowcount>0
