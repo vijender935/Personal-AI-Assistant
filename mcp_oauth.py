@@ -3,8 +3,8 @@ from __future__ import annotations
 import asyncio,json,os,secrets,time
 from dataclasses import dataclass
 from urllib.parse import parse_qs,urlparse
-from config import DB_PATH,ensure_directories
-from db import connect,using_postgres
+from config import ensure_directories
+from db import connect
 def oauth_redirect_uri():
     base=os.getenv("PUBLIC_BASE_URL","").strip().rstrip("/")
     if not base: base=os.getenv("API_BASE_URL","").strip().rstrip("/")
@@ -12,23 +12,13 @@ def oauth_redirect_uri():
     return base+"/api/v1/mcp/oauth/callback"
 def init_oauth_db():
     ensure_directories()
-    with connect(DB_PATH) as con:
-        if using_postgres():
-            con.execute("""CREATE TABLE IF NOT EXISTS mcp_oauth_credentials(
-                connector_id BIGINT PRIMARY KEY,tokens TEXT,client_info TEXT,updated_at DOUBLE PRECISION NOT NULL)""")
-        else:
-            con.execute("""CREATE TABLE IF NOT EXISTS mcp_oauth_credentials(
-                connector_id INTEGER PRIMARY KEY,tokens TEXT,client_info TEXT,updated_at REAL NOT NULL)""")
-        # Remove legacy user_id tracking.
-        if using_postgres():
-            try: con.execute("ALTER TABLE mcp_oauth_credentials DROP COLUMN IF EXISTS user_id")
-            except Exception: pass
-        else:
-            cols={r[1] for r in con.execute("PRAGMA table_info(mcp_oauth_credentials)")}
-            if "user_id" in cols:
-                con.execute("CREATE TABLE mcp_oauth_credentials_new(connector_id INTEGER PRIMARY KEY,tokens TEXT,client_info TEXT,updated_at REAL NOT NULL)")
-                con.execute("INSERT OR IGNORE INTO mcp_oauth_credentials_new(connector_id,tokens,client_info,updated_at) SELECT connector_id,tokens,client_info,updated_at FROM mcp_oauth_credentials")
-                con.execute("DROP TABLE mcp_oauth_credentials"); con.execute("ALTER TABLE mcp_oauth_credentials_new RENAME TO mcp_oauth_credentials")
+    with connect() as con:
+        con.execute("""CREATE TABLE IF NOT EXISTS mcp_oauth_credentials(
+            connector_id BIGINT PRIMARY KEY,tokens TEXT,client_info TEXT,updated_at DOUBLE PRECISION NOT NULL)""")
+        try:
+            con.execute("ALTER TABLE mcp_oauth_credentials DROP COLUMN IF EXISTS user_id")
+        except Exception:
+            pass
 
 def _connector(connector_id):
     from connectors import list_connectors
@@ -47,12 +37,12 @@ except Exception:
 class DatabaseOAuthStorage:
     def __init__(self,connector_id): self.connector_id=connector_id; init_oauth_db()
     def _read(self):
-        with connect(DB_PATH) as con: row=con.execute("SELECT tokens,client_info FROM mcp_oauth_credentials WHERE connector_id=?",(self.connector_id,)).fetchone()
+        with connect() as con: row=con.execute("SELECT tokens,client_info FROM mcp_oauth_credentials WHERE connector_id=?",(self.connector_id,)).fetchone()
         tokens= json.loads(row[0]) if row and row[0] else None
         client= json.loads(row[1]) if row and row[1] else None
         return tokens,client
     def _write(self,tokens,client):
-        with connect(DB_PATH) as con:
+        with connect() as con:
             values=(self.connector_id,json.dumps(tokens) if tokens else None,json.dumps(client) if client else None,time.time())
             if using_postgres():
                 con.execute("""INSERT INTO mcp_oauth_credentials(connector_id,tokens,client_info,updated_at) VALUES(?,?,?,?)
@@ -137,7 +127,7 @@ async def complete_oauth(flow_id,code,state=None,iss=None):
 
 def oauth_token_present(connector_id):
     _connector(connector_id); init_oauth_db()
-    with connect(DB_PATH) as con:row=con.execute("SELECT tokens FROM mcp_oauth_credentials WHERE connector_id=?",(connector_id,)).fetchone()
+    with connect() as con:row=con.execute("SELECT tokens FROM mcp_oauth_credentials WHERE connector_id=?",(connector_id,)).fetchone()
     if not row or not row[0]:return False
     try:return bool(json.loads(row[0]).get("access_token"))
     except (TypeError,json.JSONDecodeError):return False
@@ -151,5 +141,5 @@ def oauth_status(connector_id):
 
 def clear_oauth(connector_id):
     _connector(connector_id); init_oauth_db()
-    with connect(DB_PATH) as con:cur=con.execute("DELETE FROM mcp_oauth_credentials WHERE connector_id=?",(connector_id,))
+    with connect() as con:cur=con.execute("DELETE FROM mcp_oauth_credentials WHERE connector_id=?",(connector_id,))
     return cur.rowcount>0
