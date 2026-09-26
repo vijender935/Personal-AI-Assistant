@@ -258,7 +258,16 @@ def add_mcp_connector(request: MCPConnectorRequest, user=Depends(current_user)):
 
     status = {"connected": False, "tools": 0, "tool_names": []}
     try:
-        from mcp_client import discover_conn@app.post("/api/v1/mcp/connectors/{connector_id}/test")
+        from mcp_client import discover_connector_diagnostics
+        status = discover_connector_diagnostics(user["id"], connector["name"])
+    except Exception as exc:
+        status = {"connected": False, "tools": 0, "tool_names": [], "error": str(exc)[:500]}
+    connector["headers"] = {key: "***" for key in connector.get("headers", {})}
+    connector["status"] = status
+    return {"connector": connector, "status": status}
+
+
+@app.post("/api/v1/mcp/connectors/{connector_id}/test")
 def test_mcp_connector(connector_id: int, user=Depends(current_user)):
     connector = next((x for x in list_connectors(user["id"]) if x["id"] == connector_id), None)
     if not connector:
