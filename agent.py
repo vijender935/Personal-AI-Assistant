@@ -229,26 +229,40 @@ def stream_agent(goal, session_id="default", user_id=0, image_urls=None, rag_sou
     # tool-selection round. Stream the model response directly so simple messages
     # require one Groq request instead of two.
     if not tool_schemas:
-        try:
-            stream = client.chat.completions.create(
-                model=VISION_MODEL if image_urls else MODEL,
-                messages=messages,
-                temperature=0.4,
-                stream=True,
-            )
+        # Streaming connections can fail transiently (provider 5xx/429,
+        # connection resets, or short-lived network errors). Retry only when
+        # no tokens have reached the client yet; once partial output exists,
+        # retrying would duplicate text in the conversation.
+        for retry in range(MAX_RETRIES + 1):
             parts = []
-            for chunk in stream:
-                delta = chunk.choices[0].delta.content if chunk.choices else None
-                if delta:
-                    parts.append(delta)
-                    yield delta
-            answer = "".join(parts)
-            if answer:
-                save_turn(session_id, goal, answer, user_id=user_id)
-        except Exception:
-            logger.exception("Fast streaming request failed")
-            yield "❌ Streaming request failed."
-        return
+            try:
+                stream = client.chat.completions.create(
+                    model=VISION_MODEL if image_urls else MODEL,
+                    messages=messages,
+                    temperature=0.4,
+                    stream=True,
+                )
+                for chunk in stream:
+                    delta = chunk.choices[0].delta.content if chunk.choices else None
+                    if delta:
+                        parts.append(delta)
+                        yield delta
+                answer = "".join(parts)
+                if answer:
+                    save_turn(session_id, goal, answer, user_id=user_id)
+                return
+            except Exception as exc:
+                logger.warning(
+                    "Fast streaming request failed (retry %s/%s): %s",
+                    retry,
+                    MAX_RETRIES,
+                    exc,
+                )
+                if parts or retry >= MAX_RETRIES:
+                    logger.exception("Fast streaming request failed permanently")
+                    yield "❌ Streaming request failed."
+                    return
+                time.sleep(2 ** retry)
 
     state = ExecutionState()
     prepared_final_response = False
@@ -312,25 +326,39 @@ def stream_agent(goal, session_id="default", user_id=0, image_urls=None, rag_sou
         yield "⚠️ Max tool iterations reached — task incomplete reh gaya."
         return
 
-    try:
-        stream = client.chat.completions.create(
-            model=VISION_MODEL if image_urls else MODEL,
-            messages=messages,
-            temperature=0.4,
-            stream=True,
-        )
+    # The final streaming call can also fail transiently. As above, retry
+    # only before any token is emitted so the client never receives duplicate
+    # partial answers.
+    for retry in range(MAX_RETRIES + 1):
         parts = []
-        for chunk in stream:
-            delta = chunk.choices[0].delta.content if chunk.choices else None
-            if delta:
-                parts.append(delta)
-                yield delta
-        answer = "".join(parts)
-        if answer:
-            save_turn(session_id, goal, answer, user_id=user_id)
-    except Exception:
-        logger.exception("Streaming final model request failed")
-        yield "❌ Streaming request failed."
+        try:
+            stream = client.chat.completions.create(
+                model=VISION_MODEL if image_urls else MODEL,
+                messages=messages,
+                temperature=0.4,
+                stream=True,
+            )
+            for chunk in stream:
+                delta = chunk.choices[0].delta.content if chunk.choices else None
+                if delta:
+                    parts.append(delta)
+                    yield delta
+            answer = "".join(parts)
+            if answer:
+                save_turn(session_id, goal, answer, user_id=user_id)
+            return
+        except Exception as exc:
+            logger.warning(
+                "Streaming final model request failed (retry %s/%s): %s",
+                retry,
+                MAX_RETRIES,
+                exc,
+            )
+            if parts or retry >= MAX_RETRIES:
+                logger.exception("Streaming final model request failed permanently")
+                yield "❌ Streaming request failed."
+                return
+            time.sleep(2 ** retry)
 
 def interactive():
     session_id = os.getenv("AGENT_SESSION", "default")
