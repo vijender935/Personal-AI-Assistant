@@ -73,7 +73,8 @@ function App(){
   const r=await fetch(API+"/api/v1/chats/"+encodeURIComponent(id),{method:"PATCH",headers:{"Content-Type":"application/json",Authorization:"Bearer "+token},body:JSON.stringify({title})});
   if(r.ok){setChats(cs=>cs.map(c=>c.id===id?{...c,title}:c));setRenameState(null)}else notify("Rename failed");
  }
- function deleteChatById(id){setConfirmState({type:"chat",id,message:"Delete this conversation?"});}\n async function clearAllChats(){
+ function deleteChatById(id){setConfirmState({type:"chat",id,message:"Delete this conversation?"});}
+ async function clearAllChats(){
   const r=await fetch(API+"/api/v1/chats",{method:"DELETE",headers:{Authorization:"Bearer "+token}});
   if(!r.ok){notify("Could not clear chat history");return false}
   const fresh=[{id:"new",title:"New conversation",messages:[]}];
