@@ -62,7 +62,11 @@ def init_semantic_store():
                     con.execute(f"DROP TABLE {table}"); con.execute(f"ALTER TABLE {table}_new RENAME TO {table}")
         else:
             for table in ("semantic_memories","rag_documents"):
-                try: con.execute(f"ALTER TABLE {table} DROP COLUMN IF EXISTS user_id")
+                try:
+                    if table=="semantic_memories":
+                        con.execute("DROP INDEX IF EXISTS uq_semantic_user_fact"); con.execute("DROP INDEX IF EXISTS idx_semantic_user")
+                    if table=="rag_documents": con.execute("DROP INDEX IF EXISTS idx_rag_user")
+                    con.execute(f"ALTER TABLE {table} DROP COLUMN IF EXISTS user_id")
                 except Exception: pass
 
 def remember_semantic(fact,source="user"):
