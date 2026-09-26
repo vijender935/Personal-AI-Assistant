@@ -6,8 +6,6 @@ from pathlib import Path
 BASE_DIR = Path(__file__).resolve().parent
 DATA_DIR = Path(os.getenv("AGENT_DATA_DIR", BASE_DIR / "data")).expanduser().resolve()
 FILE_ROOT = Path(os.getenv("AGENT_FILE_ROOT", DATA_DIR / "files")).expanduser().resolve()
-DB_PATH = Path(os.getenv("AGENT_DB", DATA_DIR / "agent_memory.db")).expanduser().resolve()
-REQUIRE_PERSISTENT_DB = os.getenv("REQUIRE_PERSISTENT_DB","0")=="1"
 
 MODEL = os.getenv("GROQ_MODEL", "openai/gpt-oss-120b")
 VISION_MODEL = os.getenv("GROQ_VISION_MODEL", "qwen/qwen3.8-27b")
