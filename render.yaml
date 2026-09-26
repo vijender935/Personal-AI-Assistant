@@ -18,8 +18,6 @@ services:
         sync: false
       - key: MCP_SERVERS
         sync: false
-      - key: REQUIRE_PERSISTENT_DB
-        value: "1"
       - key: AUTH_SESSION_DAYS
         value: "30"
       - key: DATABASE_URL
