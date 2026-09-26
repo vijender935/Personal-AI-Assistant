@@ -1,37 +1,32 @@
 """Local tools and persistent single-user chat/memory storage."""
 from __future__ import annotations
-import ast, operator, re, shlex, subprocess, sqlite3
+import ast, operator, re, shlex, subprocess
 from pathlib import Path
-from config import ALLOW_SHELL, ALLOWED_SHELL_COMMANDS, DB_PATH, FILE_ROOT, MAX_FILE_CHARS, SHELL_TIMEOUT, ensure_directories
-from db import connect, using_postgres
+from config import ALLOW_SHELL, ALLOWED_SHELL_COMMANDS, FILE_ROOT, MAX_FILE_CHARS, SHELL_TIMEOUT, ensure_directories
+from db import connect
 MAX_SHELL_OUTPUT=4000
 MAX_MEMORY_SCAN=500
 
 def init_db():
     ensure_directories()
-    with connect(DB_PATH) as con:
-        # Authentication is intentionally removed from this single-user app.
-        try: con.execute("DROP TABLE IF EXISTS auth_sessions")
-        except Exception: pass
-        try: con.execute("DROP TABLE IF EXISTS users")
-        except Exception: pass
-        if using_postgres():
-            con.execute("""CREATE TABLE IF NOT EXISTS messages(id BIGSERIAL PRIMARY KEY,session_id TEXT NOT NULL,role TEXT NOT NULL,content TEXT NOT NULL,created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP)""")
-            con.execute("""CREATE TABLE IF NOT EXISTS memories(id BIGSERIAL PRIMARY KEY,fact TEXT NOT NULL UNIQUE,source TEXT,created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP)""")
-        else:
-            con.execute("""CREATE TABLE IF NOT EXISTS messages(id INTEGER PRIMARY KEY AUTOINCREMENT,session_id TEXT NOT NULL,role TEXT NOT NULL,content TEXT NOT NULL,created_at DATETIME DEFAULT CURRENT_TIMESTAMP)""")
-            con.execute("""CREATE TABLE IF NOT EXISTS memories(id INTEGER PRIMARY KEY AUTOINCREMENT,fact TEXT NOT NULL UNIQUE,source TEXT,created_at DATETIME DEFAULT CURRENT_TIMESTAMP)""")
+    with connect() as con:
+        con.execute("""CREATE TABLE IF NOT EXISTS messages(
+            id BIGSERIAL PRIMARY KEY,session_id TEXT NOT NULL,role TEXT NOT NULL,
+            content TEXT NOT NULL,created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP)""")
+        con.execute("""CREATE TABLE IF NOT EXISTS memories(
+            id BIGSERIAL PRIMARY KEY,fact TEXT NOT NULL UNIQUE,source TEXT,
+            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP)""")
         con.execute("CREATE INDEX IF NOT EXISTS idx_messages_session ON messages(session_id)")
         con.execute("""CREATE TABLE IF NOT EXISTS chat_metadata(session_id TEXT PRIMARY KEY,title TEXT NOT NULL)""")
 
 def save_turn(session_id,user_text,assistant_text):
-    with connect(DB_PATH) as con:
+    with connect() as con:
         con.execute("INSERT INTO messages(session_id,role,content) VALUES(?,?,?)",(session_id,"user",user_text))
         con.execute("INSERT INTO messages(session_id,role,content) VALUES(?,?,?)",(session_id,"assistant",assistant_text))
 
 def load_history(session_id,limit=30):
     limit=max(1,int(limit))
-    with connect(DB_PATH) as con:
+    with connect() as con:
         rows=con.execute("SELECT role,content FROM messages WHERE session_id=? ORDER BY id DESC LIMIT ?",(session_id,limit)).fetchall()
     history=[]
     for role,content in reversed(rows):
@@ -41,23 +36,19 @@ def load_history(session_id,limit=30):
 
 def list_sessions(limit=50):
     limit=max(1,min(int(limit),1000))
-    with connect(DB_PATH) as con:
+    with connect() as con:
         rows=con.execute("SELECT session_id,MAX(id) AS last_id FROM messages GROUP BY session_id ORDER BY last_id DESC LIMIT ?",(limit,)).fetchall()
     return [x[0] for x in rows]
 
 def remember_fact(fact,source="user"):
     fact=fact.strip()
     if not fact:return
-    with connect(DB_PATH) as con:
-        if using_postgres():
-            con.execute("INSERT INTO memories(fact,source) VALUES(?,?) ON CONFLICT(fact) DO UPDATE SET source=excluded.source",(fact,source))
-        else:
-            try: con.execute("INSERT INTO memories(fact,source) VALUES(?,?)",(fact,source))
-            except sqlite3.IntegrityError: con.execute("UPDATE memories SET source=? WHERE fact=?",(source,fact))
+    with connect() as con:
+        con.execute("INSERT INTO memories(fact,source) VALUES(?,?) ON CONFLICT(fact) DO UPDATE SET source=excluded.source",(fact,source))
 
 def recall_memories(query="",limit=8):
     limit=max(1,int(limit))
-    with connect(DB_PATH) as con: rows=con.execute("SELECT fact FROM memories ORDER BY id DESC LIMIT ?",(MAX_MEMORY_SCAN,)).fetchall()
+    with connect() as con: rows=con.execute("SELECT fact FROM memories ORDER BY id DESC LIMIT ?",(MAX_MEMORY_SCAN,)).fetchall()
     facts=[r[0] for r in rows]
     if not query:return facts[:limit]
     terms={x.lower() for x in re.findall(r"\w+",query) if len(x)>2}
@@ -135,21 +126,21 @@ TOOL_SCHEMAS=[
 def set_chat_title(session_id,title):
     title=title.strip()[:80]
     if not title: raise ValueError("Chat title cannot be empty.")
-    with connect(DB_PATH) as con:
+    with connect() as con:
         con.execute("INSERT INTO chat_metadata(session_id,title) VALUES(?,?) ON CONFLICT(session_id) DO UPDATE SET title=excluded.title",(session_id,title))
 def get_chat_title(session_id):
-    with connect(DB_PATH) as con: row=con.execute("SELECT title FROM chat_metadata WHERE session_id=?",(session_id,)).fetchone()
+    with connect() as con: row=con.execute("SELECT title FROM chat_metadata WHERE session_id=?",(session_id,)).fetchone()
     return row[0] if row else None
 def delete_chat(session_id):
-    with connect(DB_PATH) as con:
+    with connect() as con:
         con.execute("DELETE FROM messages WHERE session_id=?",(session_id,)); con.execute("DELETE FROM chat_metadata WHERE session_id=?",(session_id,))
 def remove_last_assistant(session_id):
-    with connect(DB_PATH) as con:
+    with connect() as con:
         row=con.execute("SELECT id FROM messages WHERE session_id=? AND role='assistant' ORDER BY id DESC LIMIT 1",(session_id,)).fetchone()
         if not row:return False
         con.execute("DELETE FROM messages WHERE id=?",(row[0],)); return True
 def remove_last_turn(session_id):
-    with connect(DB_PATH) as con:
+    with connect() as con:
         rows=con.execute("SELECT id FROM messages WHERE session_id=? ORDER BY id DESC LIMIT 2",(session_id,)).fetchall()
         if len(rows)<2:return False
         con.executemany("DELETE FROM messages WHERE id=? ",[(row[0],) for row in rows]); return True
