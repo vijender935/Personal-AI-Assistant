@@ -114,11 +114,13 @@ class _OAuthFlow:
     ready: asyncio.Future
     callback: asyncio.Future
     auth_url: str | None = None
+    oauth_state: str | None = None
     task: asyncio.Task | None = None
     created_at: float = 0.0
 
 
 _FLOWS: dict[str, _OAuthFlow] = {}
+_STATE_TO_FLOW: dict[str, str] = {}
 _FLOW_TTL = 10 * 60
 
 
@@ -151,6 +153,13 @@ async def _run_flow(flow_id: str, flow: _OAuthFlow, redirect_uri: str) -> None:
 
     async def redirect_handler(authorization_url: str) -> None:
         flow.auth_url = authorization_url
+        try:
+            params = parse_qs(urlparse(authorization_url).query)
+            flow.oauth_state = params.get("state", [None])[0]
+            if flow.oauth_state:
+                _STATE_TO_FLOW[flow.oauth_state] = flow_id
+        except Exception:
+            flow.oauth_state = None
         if not flow.ready.done():
             flow.ready.set_result(authorization_url)
 
@@ -217,7 +226,11 @@ async def complete_oauth(
     iss: str | None = None,
 ) -> dict[str, Any]:
     _cleanup_flows()
-    flow = _FLOWS.get(flow_id)
+    flow = _FLOWS.get(flow_id) if flow_id else None
+    if not flow and state:
+        resolved_id = _STATE_TO_FLOW.get(state)
+        flow_id = resolved_id
+        flow = _FLOWS.get(resolved_id) if resolved_id else None
     if not flow:
         raise ValueError("OAuth flow expired or was not found.")
     if flow.callback.done():
@@ -229,6 +242,8 @@ async def complete_oauth(
         raise RuntimeError("OAuth token exchange timed out.") from exc
     finally:
         _FLOWS.pop(flow_id, None)
+    if flow.oauth_state:
+        _STATE_TO_FLOW.pop(flow.oauth_state, None)
     return {"connected": True, "connector_id": flow.connector_id}
 
 
