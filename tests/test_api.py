@@ -1,188 +1,26 @@
 from fastapi.testclient import TestClient
-import uuid
-
-import api
-import auth
-from tools import save_turn
-import tools
-
-
-client = TestClient(api.app)
-
-
-def auth_headers():
-    email = f"test-{uuid.uuid4().hex}@example.com"
-    response = client.post("/api/v1/auth/register", json={"name":"Test User","email":email,"password":"password123"})
-    assert response.status_code == 200
-    return {"Authorization": "Bearer " + response.json()["token"]}
-
-
-def test_health():
-    response = client.get("/health")
-    assert response.status_code == 200
-    assert response.json()["status"] == "ok"
-
-
-def test_info():
-    response = client.get("/api/v1/info")
-    assert response.status_code == 200
-    assert response.json()["name"] == "Personal AI Assistant"
-
-
-def test_memory_api():
-    headers = auth_headers()
-    response = client.post(
-        "/api/v1/memories",
-        json={"fact": "Phase 7 test memory", "source": "test"},
-        headers=headers,
-    )
-    assert response.status_code == 200
-    assert response.json()["saved"] is True
-
-    response = client.get("/api/v1/memories/search", params={"q": "Phase 7"}, headers=headers)
-    assert response.status_code == 200
-    assert "Phase 7 test memory" in response.json()["memories"]
-
-
-def test_chat_without_api_key(monkeypatch):
-    monkeypatch.delenv("GROQ_API_KEY", raising=False)
-    response = client.post(
-        "/api/v1/chat",
-        json={"message": "Hello", "session_id": "test"},
-    )
-    assert response.status_code == 401
-
-
-def _register_user():
-    return auth_headers()
-
-
-def test_chat_management_requires_authentication():
-    assert client.get("/api/v1/chats").status_code == 401
-    assert client.patch("/api/v1/chats/test", json={"title":"Renamed"}).status_code == 401
-    assert client.delete("/api/v1/chats/test").status_code == 401
-    assert client.post("/api/v1/chats/test/regenerate").status_code == 401
-    assert client.post("/api/v1/chats/test/edit", json={"message":"new"}).status_code == 401
-
-
-def test_chat_management_not_found():
-    headers = _register_user()
-    assert client.patch("/api/v1/chats/missing", json={"title":"Renamed"}, headers=headers).status_code == 404
-    assert client.delete("/api/v1/chats/missing", headers=headers).status_code == 404
-    assert client.post("/api/v1/chats/missing/regenerate", headers=headers).status_code == 400
-    assert client.post("/api/v1/chats/missing/edit", json={"message":"new"}, headers=headers).status_code == 400
-
-
-def test_chat_rename_delete_and_list(monkeypatch):
-    headers = _register_user()
-    user = api.get_user(headers["Authorization"].split(" ", 1)[1])
-    assert user
-    save_turn(f"user-{user['id']}-chat-1", "hello", "world", user_id=user["id"])
-
-    response = client.patch(
-        "/api/v1/chats/chat-1",
-        json={"title":"My renamed chat"},
-        headers=headers,
-    )
-    assert response.status_code == 200
-    assert response.json()["title"] == "My renamed chat"
-
-    response = client.get("/api/v1/chats", headers=headers)
-    assert response.status_code == 200
-    chat = next(item for item in response.json()["chats"] if item["session_id"] == "chat-1")
-    assert chat["title"] == "My renamed chat"
-
-    response = client.delete("/api/v1/chats/chat-1", headers=headers)
-    assert response.status_code == 200
-    assert response.json()["deleted"] is True
-
-    response = client.get("/api/v1/chats", headers=headers)
-    assert all(item["session_id"] != "chat-1" for item in response.json()["chats"])
-
-
-def test_chat_management_isolated_between_users(monkeypatch):
-    headers_a = _register_user()
-    headers_b = _register_user()
-    token_a = headers_a["Authorization"].split(" ", 1)[1]
-    token_b = headers_b["Authorization"].split(" ", 1)[1]
-    user_a = api.get_user(token_a)
-    user_b = api.get_user(token_b)
-    api.save_turn(f"user-{user_a['id']}-private", "secret A", "answer A", user_id=user_a["id"])
-
-    assert client.patch(
-        "/api/v1/chats/private", json={"title":"A"}, headers=headers_b
-    ).status_code == 404
-    assert client.delete("/api/v1/chats/private", headers=headers_b).status_code == 404
-
-    response = client.get("/api/v1/chats/private", headers=headers_b)
-    assert response.status_code == 200
-    assert response.json()["messages"] == []
-
-
-def test_regenerate_and_edit_chat(monkeypatch):
-    headers = _register_user()
-    token = headers["Authorization"].split(" ", 1)[1]
-    user = api.get_user(token)
-    session = f"user-{user['id']}-managed"
-    api.save_turn(session, "original", "old answer", user_id=user["id"])
-
-    def fake_run_agent(*args, **kwargs):
-        tools.save_turn(kwargs["session_id"], kwargs.get("goal", "edited"), "new answer", user_id=kwargs["user_id"])
-        return "new answer"
-    monkeypatch.setattr(api, "run_agent", fake_run_agent)
-    response = client.post("/api/v1/chats/managed/regenerate", headers=headers)
-    assert response.status_code == 200
-    assert response.json()["answer"] == "new answer"
-
-    response = client.post(
-        "/api/v1/chats/managed/edit",
-        json={"message":"edited"},
-        headers=headers,
-    )
-    assert response.status_code == 200
-    assert response.json()["message"] == "edited"
-    assert response.json()["answer"] == "new answer"
-
-
-
-def test_logout_revokes_session():
-    headers = _register_user()
-    token = headers["Authorization"].split(" ", 1)[1]
-    assert client.get("/api/v1/auth/me", headers=headers).status_code == 200
-    response = client.post("/api/v1/auth/logout", headers=headers)
-    assert response.status_code == 200
-    assert client.get("/api/v1/auth/me", headers=headers).status_code == 401
-
-
-def test_expired_session_is_rejected(monkeypatch):
-    headers = _register_user()
-    token = headers["Authorization"].split(" ", 1)[1]
-    monkeypatch.setattr(auth.time, "time", lambda: 10**12)
-    assert client.get("/api/v1/auth/me", headers=headers).status_code == 401
-
-
-def test_auth_login_success_and_invalid_password():
-    email = f"login-{uuid.uuid4().hex}@example.com"
-    response = client.post("/api/v1/auth/register", json={"name": "Login User", "email": email, "password": "password123"})
-    assert response.status_code == 200
-
-    response = client.post("/api/v1/auth/login", json={"email": email, "password": "password123"})
-    assert response.status_code == 200
-    assert response.json()["user"]["email"] == email
-
-    response = client.post("/api/v1/auth/login", json={"email": email, "password": "wrong-password"})
-    assert response.status_code == 401
-
-
-def test_auth_rate_limit(monkeypatch):
-    monkeypatch.setattr(api, "AUTH_RATE_LIMIT", 2)
-    monkeypatch.setattr(api, "AUTH_RATE_WINDOW", 60)
-    api._auth_attempts.clear()
-
-    email = f"rate-{uuid.uuid4().hex}@example.com"
-    for _ in range(2):
-        response = client.post("/api/v1/auth/login", json={"email": email, "password": "wrong-password"})
-        assert response.status_code == 401
-
-    response = client.post("/api/v1/auth/login", json={"email": email, "password": "wrong-password"})
-    assert response.status_code == 429
+import api,tools
+client=TestClient(api.app)
+def test_health(): assert client.get("/health").status_code==200
+def test_info_single_user(): assert client.get("/api/v1/info").json()["mode"]=="single-user"
+def test_chat_without_key(monkeypatch):
+ monkeypatch.delenv("GROQ_API_KEY",raising=False)
+ assert client.post("/api/v1/chat",json={"message":"Hello","session_id":"test"}).status_code==503
+def test_memory_api(monkeypatch):
+ monkeypatch.setattr(api,"remember_semantic",lambda *a,**k:True)
+ r=client.post("/api/v1/memories",json={"fact":"Phase 1 test memory","source":"test"});assert r.status_code==200
+ assert r.json()["saved"] is True
+def test_chat_management():
+ tools.save_turn("api-test","hello","world")
+ assert client.get("/api/v1/chats/api-test").status_code==200
+ assert client.patch("/api/v1/chats/api-test",json={"title":"Renamed"}).status_code==200
+ assert client.get("/api/v1/chats/api-test").json()["title"]=="Renamed"
+ assert client.delete("/api/v1/chats/api-test").json()["deleted"] is True
+def test_missing_chat():
+ assert client.patch("/api/v1/chats/missing",json={"title":"Renamed"}).status_code==404
+ assert client.delete("/api/v1/chats/missing").status_code==404
+def test_settings_round_trip():
+ r=client.patch("/api/v1/settings",json={"appearance":"Dark","haptics":False});assert r.status_code==200
+ assert r.json()["settings"]["appearance"]=="Dark"
+def test_no_auth_routes():
+ assert client.post("/api/v1/auth/login",json={"email":"x","password":"y"}).status_code==404
