@@ -17,7 +17,7 @@ from mcp_registry import registry_snapshot
 from connectors import init_connectors_db,list_connectors,upsert_connector,delete_connector
 from preferences import init_preferences_db,get_preferences,update_preferences
 from document_parser import extract_and_limit,is_supported_document
-from auth import SESSION_COOKIE,init_auth_db,account_exists,setup_account,login as auth_login,get_account_for_session,logout as auth_logout,update_account,change_password
+from auth import SESSION_COOKIE,SESSION_DAYS,init_auth_db,account_exists,setup_account,login as auth_login,get_account_for_session,logout as auth_logout,update_account,change_password
 logger=logging.getLogger(__name__)
 CHAT_RATE_LIMIT=max(1,int(os.getenv("CHAT_RATE_LIMIT","30"))); CHAT_RATE_WINDOW=max(1,int(os.getenv("CHAT_RATE_WINDOW","60"))); _chat_attempts={}
 
@@ -99,7 +99,7 @@ def auth_setup(request:AccountSetupRequest,raw_request:Request):
     from fastapi.responses import JSONResponse
     out=JSONResponse({"authenticated":True,"account":account})
     secure=raw_request.url.scheme=="https" or raw_request.headers.get("x-forwarded-proto","").lower()=="https"
-    out.set_cookie(SESSION_COOKIE,token,httponly=True,samesite="none" if secure else "lax",secure=secure,max_age=30*86400,path="/")
+    out.set_cookie(SESSION_COOKIE,token,httponly=True,samesite="none" if secure else "lax",secure=secure,max_age=SESSION_DAYS*86400,path="/")
     return out
 
 @app.post("/api/v1/auth/login")
