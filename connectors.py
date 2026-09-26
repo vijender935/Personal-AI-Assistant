@@ -134,7 +134,7 @@ def upsert_connector(user_id,name,transport,url,allowed_tools=None,headers=None)
     init_connectors_db()
     with connect(DB_PATH) as con:
         con.execute("""INSERT INTO mcp_connectors(user_id,name,transport,url,headers,allowed_tools,enabled)
-            VALUES(?,?,?,?,?,?,?) ON CONFLICT(user_id,name) DO UPDATE SET transport=excluded.transport,url=excluded.url,allowed_tools=excluded.allowed_tools,enabled=excluded.enabled""",
+            VALUES(?,?,?,?,?,?,?) ON CONFLICT(user_id,name) DO UPDATE SET transport=excluded.transport,url=excluded.url,headers=excluded.headers,allowed_tools=excluded.allowed_tools,enabled=excluded.enabled""",
             (user_id,name,transport,url,json.dumps(header_map),json.dumps(tools),True if using_postgres() else 1))
     return next(item for item in list_connectors(user_id) if item["name"]==name)
 
