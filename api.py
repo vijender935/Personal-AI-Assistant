@@ -300,4 +300,59 @@ def create_memory(request:MemoryRequest):
 def delete_memory(fact:str):
     exact=fact.strip()
     deleted_exact=delete_semantic_memory(exact)
-    # NOTE: file was truncated earlier - remaining endpoints restored below from original
+    with connect() as con:
+        cur=con.execute("DELETE FROM memories WHERE fact=?",(exact,))
+    return {"deleted":bool(cur.rowcount or deleted_exact),"fact":exact}
+@app.get("/api/v1/memories")
+def list_memories(limit:int=50):return {"memories":recall_memories("",limit=max(1,min(limit,100)))}
+@app.get("/api/v1/memories/search")
+def search_memories(q:str,limit:int=8):
+    if not q.strip():raise HTTPException(status_code=400,detail="Query cannot be empty.")
+    from memory import search_semantic_memories
+    return {"query":q,"memories":search_semantic_memories(q,limit=max(1,min(limit,50)))}
+
+@app.post("/api/v1/rag/documents")
+def create_rag_document(request:RAGDocumentRequest):
+    try:return {"source":request.source,"chunks_added":index_document(request.source,request.content)}
+    except Exception as exc:raise HTTPException(status_code=500,detail=str(exc)) from exc
+@app.post("/api/v1/rag/files")
+def create_rag_file(path:str):
+    try:
+        candidate=ensure_local_file(path)
+        if not is_supported_document(candidate):raise ValueError("Unsupported document type.")
+        added=index_document(path,extract_and_limit(candidate),replace_source=True); return {"path":path,"chunks_added":added}
+    except FileNotFoundError:raise HTTPException(status_code=404,detail="File not found.")
+    except PermissionError as exc:raise HTTPException(status_code=403,detail=str(exc))
+    except Exception as exc:raise HTTPException(status_code=500,detail=str(exc)) from exc
+@app.get("/api/v1/rag/sources")
+def get_rag_sources():return {"sources":rag_source_status()}
+
+MAX_UPLOAD_BYTES=10*1024*1024
+@app.post("/api/v1/files/upload")
+async def upload_file(file:UploadFile=File(...)):
+    if not file.filename:raise HTTPException(status_code=400,detail="Filename is required.")
+    content=await file.read(MAX_UPLOAD_BYTES+1)
+    if len(content)>MAX_UPLOAD_BYTES:raise HTTPException(status_code=413,detail="File exceeds the 10 MB upload limit.")
+    try:
+        path=save_upload(file.filename,content); indexed=0; candidate=ensure_local_file(path)
+        if is_supported_document(candidate):
+            try:indexed=index_document(path,extract_and_limit(candidate),replace_source=True)
+            except RuntimeError:pass
+        return {"path":path,"name":candidate.name,"size":len(content),"indexed_chunks":indexed}
+    except ValueError as exc:raise HTTPException(status_code=400,detail=str(exc)) from exc
+@app.get("/api/v1/files")
+def get_files():
+    files=list_uploads(); statuses={x["source"]:x for x in rag_source_status()}
+    for item in files:
+        status=statuses.get(item["path"]); item["rag_indexed"]=bool(status); item["rag_chunks"]=status["chunks"] if status else 0; item["rag_indexed_at"]=status["indexed_at"] if status else None
+    return {"files":files}
+@app.get("/api/v1/files/{path:path}")
+def get_file(path:str):
+    try:candidate=ensure_local_file(path)
+    except (FileNotFoundError,PermissionError):raise HTTPException(status_code=404,detail="File not found.")
+    import mimetypes
+    return FileResponse(candidate,media_type=mimetypes.guess_type(candidate.name)[0] or "application/octet-stream",filename=candidate.name)
+@app.delete("/api/v1/files/{path:path}")
+def delete_file(path:str):
+    try:delete_upload(path); deleted_chunks=delete_rag_source(path); return {"deleted":True,"path":path,"rag_chunks_deleted":deleted_chunks}
+    except (FileNotFoundError,PermissionError):raise HTTPException(status_code=404,detail="File not found.")
