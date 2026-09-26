@@ -17,6 +17,7 @@ from mcp_registry import registry_snapshot
 from connectors import init_connectors_db,list_connectors,upsert_connector,delete_connector
 from preferences import init_preferences_db,get_preferences,update_preferences
 from document_parser import extract_and_limit,is_supported_document
+from auth import SESSION_COOKIE,init_auth_db,account_exists,setup_account,login as auth_login,get_account_for_session,logout as auth_logout,update_account,change_password
 logger=logging.getLogger(__name__)
 CHAT_RATE_LIMIT=max(1,int(os.getenv("CHAT_RATE_LIMIT","30"))); CHAT_RATE_WINDOW=max(1,int(os.getenv("CHAT_RATE_WINDOW","60"))); _chat_attempts={}
 
@@ -31,7 +32,7 @@ def _check_chat_rate_limit(key):
         for k,v in list(_chat_attempts.items()):
             if not v or v[-1]<cutoff:_chat_attempts.pop(k,None)
 
-ensure_directories(); init_db(); init_semantic_store(); init_connectors_db(); init_preferences_db()
+ensure_directories(); init_db(); init_semantic_store(); init_connectors_db(); init_preferences_db(); init_auth_db()
 
 app=FastAPI(title="Personal AI Assistant API",version="1.0.0",description="REST API for a single-user personal AI assistant.")
 origins=[x.strip() for x in os.getenv("CORS_ORIGINS","http://localhost:3000,http://localhost:5173").split(",") if x.strip()]
@@ -40,6 +41,18 @@ class SecurityHeadersMiddleware(BaseHTTPMiddleware):
     async def dispatch(self,request,call_next):
         response=await call_next(request); response.headers.setdefault("X-Content-Type-Options","nosniff"); response.headers.setdefault("X-Frame-Options","DENY"); response.headers.setdefault("Referrer-Policy","strict-origin-when-cross-origin"); return response
 app.add_middleware(SecurityHeadersMiddleware)
+
+PUBLIC_API_PATHS={"/health","/api/v1/info","/api/v1/auth/status","/api/v1/auth/setup","/api/v1/auth/login"}
+@app.middleware("http")
+async def authentication_middleware(request:Request,call_next):
+    if request.method=="OPTIONS" or request.url.path in PUBLIC_API_PATHS or not request.url.path.startswith("/api/v1/"):
+        return await call_next(request)
+    account=get_account_for_session(request.cookies.get(SESSION_COOKIE))
+    if not account:
+        from fastapi.responses import JSONResponse
+        return JSONResponse({"detail":"Authentication required."},status_code=401)
+    request.state.account=account
+    return await call_next(request)
 
 class ChatRequest(BaseModel):
     message:str=Field(...,min_length=1,max_length=20000)
@@ -57,6 +70,10 @@ class PreferencesRequest(BaseModel):
 class MCPConnectorRequest(BaseModel):
     name:str=Field(...,min_length=1,max_length=80); transport:str="streamable-http"; url:str=Field(...,min_length=8,max_length=2000)
     allowed_tools:list[str]=Field(default_factory=list,max_length=100); headers:dict[str,str]=Field(default_factory=dict)
+class AuthCredentials(BaseModel): email:str=Field(...,min_length=3,max_length=254); password:str=Field(...,min_length=8,max_length=200)
+class AccountSetupRequest(AuthCredentials): display_name:str=Field(...,min_length=1,max_length=80)
+class AccountUpdateRequest(BaseModel): display_name:str=Field(...,min_length=1,max_length=80); email:str=Field(...,min_length=3,max_length=254)
+class PasswordChangeRequest(BaseModel): current_password:str=Field(...,min_length=8,max_length=200)
 class ChatTitleRequest(BaseModel): title:str=Field(...,min_length=1,max_length=80)
 class RAGDocumentRequest(BaseModel):
     source:str=Field(...,min_length=1,max_length=500); content:str=Field(...,min_length=1,max_length=200000)
@@ -65,6 +82,53 @@ class RAGDocumentRequest(BaseModel):
 def health(): return {"status":"ok","service":"personal-ai-assistant","model":MODEL,"shell_enabled":ALLOW_SHELL}
 @app.get("/api/v1/info")
 def info(): return {"name":"Personal AI Assistant","version":"1.0.0","model":MODEL,"shell_enabled":ALLOW_SHELL,"mode":"single-user"}
+
+@app.get("/api/v1/auth/status")
+def auth_status(request:Request):
+    account=get_account_for_session(request.cookies.get(SESSION_COOKIE))
+    return {"configured":account_exists(),"authenticated":bool(account),"account":account or None}
+
+@app.post("/api/v1/auth/setup")
+def auth_setup(request:AccountSetupRequest,raw_request:Request):
+    try: account=setup_account(request.display_name,request.email,request.password)
+    except RuntimeError as exc: raise HTTPException(status_code=409,detail=str(exc)) from exc
+    except ValueError as exc: raise HTTPException(status_code=400,detail=str(exc)) from exc
+    token,_=auth_login(request.email,request.password)
+    from fastapi.responses import JSONResponse
+    out=JSONResponse({"authenticated":True,"account":account})
+    secure=raw_request.url.scheme=="https" or raw_request.headers.get("x-forwarded-proto","").lower()=="https"
+    out.set_cookie(SESSION_COOKIE,token,httponly=True,samesite="lax",secure=secure,max_age=30*86400,path="/")
+    return out
+
+@app.post("/api/v1/auth/login")
+def auth_login_route(request:AuthCredentials,raw_request:Request):
+    result=auth_login(request.email,request.password)
+    if not result: raise HTTPException(status_code=401,detail="Invalid email or password.")
+    token,account=result
+    from fastapi.responses import JSONResponse
+    out=JSONResponse({"authenticated":True,"account":account})
+    secure=raw_request.url.scheme=="https" or raw_request.headers.get("x-forwarded-proto","").lower()=="https"
+    out.set_cookie(SESSION_COOKIE,token,httponly=True,samesite="lax",secure=secure,max_age=30*86400,path="/")
+    return out
+
+@app.get("/api/v1/auth/me")
+def auth_me(request:Request): return {"account":request.state.account}
+
+@app.patch("/api/v1/auth/account")
+def auth_account(request:AccountUpdateRequest,raw_request:Request):
+    try:return {"account":update_account(raw_request.cookies.get(SESSION_COOKIE),request.display_name,request.email)}
+    except ValueError as exc: raise HTTPException(status_code=400,detail=str(exc)) from exc
+
+@app.post("/api/v1/auth/password")
+def auth_password(request:PasswordChangeRequest,raw_request:Request):
+    try: change_password(raw_request.cookies.get(SESSION_COOKIE),request.current_password,request.new_password); return {"updated":True}
+    except ValueError as exc: raise HTTPException(status_code=400,detail=str(exc)) from exc
+
+@app.post("/api/v1/auth/logout")
+def auth_logout_route(request:Request):
+    token=request.cookies.get(SESSION_COOKIE); auth_logout(token)
+    from fastapi.responses import JSONResponse
+    out=JSONResponse({"authenticated":False}); out.delete_cookie(SESSION_COOKIE,path="/"); return out
 
 @app.get("/api/v1/settings")
 def get_settings(): return {"settings":get_preferences()}
