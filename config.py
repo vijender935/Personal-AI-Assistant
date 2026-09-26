@@ -18,7 +18,7 @@ SHELL_TIMEOUT = max(1, int(os.getenv("SHELL_TIMEOUT", "30")))
 ALLOW_SHELL = os.getenv("ALLOW_SHELL", "0") == "1"
 ALLOWED_SHELL_COMMANDS = {
     item.strip().split()[0]
-    for item in os.getenv("ALLOWED_SHELL_COMMANDS", "python,python3,pip,git,pwd,ls,cat,echo").split(",")
+    for item in os.getenv("ALLOWED_SHELL_COMMANDS", "pwd,ls,cat,echo").split(",")
     if item.strip()
 }
 
