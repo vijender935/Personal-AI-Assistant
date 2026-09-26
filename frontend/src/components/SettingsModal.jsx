@@ -1,92 +1,122 @@
 import React,{useEffect,useState} from "react";
-import {X,Palette,Smartphone,AppWindow,Globe2,SlidersHorizontal,Sparkles,Plug,BrainCircuit,Shield,Link2,Database,FileText,LockKeyhole,CircleHelp,LogOut,ChevronRight,ArrowLeft,Check,Info} from "lucide-react";
+import {X,Palette,Smartphone,AppWindow,Globe2,SlidersHorizontal,Sparkles,Plug,BrainCircuit,Shield,Link2,Database,FileText,LockKeyhole,CircleHelp,LogOut,ChevronRight,ArrowLeft,Check,Info,Save,RefreshCw} from "lucide-react";
 
-function Row({icon:Icon,title,subtitle,onClick,disabled=false}){
+function Row({icon:Icon,title,subtitle,onClick,disabled=false,toggle=false,value=false}){
  return <button type="button" className="settings-row" onClick={onClick} disabled={disabled}>
   <span className="settings-row-icon"><Icon size={21} strokeWidth={1.9}/></span>
   <span className="settings-row-copy"><strong>{title}</strong>{subtitle&&<small>{subtitle}</small>}</span>
-  <ChevronRight size={19} className="settings-chevron"/>
+  {toggle?<span className={"settings-toggle "+(value?"on":"")}><span/></span>:<ChevronRight size={19} className="settings-chevron"/>}
  </button>;
 }
 function Section({title,children}){return <section className="settings-section"><h3>{title}</h3><div className="settings-group">{children}</div></section>}
 
-export default function SettingsModal({open,onClose,user,connectorForm,setConnectorForm,connectorLoading,connectorTesting,addConnector,testConnector,connectors,deleteConnectorById,onSignOut}){
+export default function SettingsModal({
+ open,onClose,onMemory,user,connectorForm,setConnectorForm,connectorLoading,connectorTesting,
+ addConnector,testConnector,connectors,deleteConnectorById,settings,settingsLoading,updateSettings
+}){
  const [page,setPage]=useState("main");
- const [appearance,setAppearance]=useState("System");
- const [language,setLanguage]=useState("English");
- const [haptics,setHaptics]=useState(true);
- useEffect(()=>{if(open)setPage("main")},[open]);
+ const [instructions,setInstructions]=useState("");
+ const [style,setStyle]=useState("Natural");
+ useEffect(()=>{if(open){setPage("main");setInstructions(settings?.custom_instructions||"");setStyle(settings?.response_style||"Natural")}},[open,settings]);
  if(!open)return null;
 
  const name=user?.name?.trim()||user?.email?.split("@")[0]||"User";
  const initials=name.slice(0,1).toUpperCase();
- const canAdd=connectorForm.name.trim().length>0&&connectorForm.url.trim().length>0&&!connectorLoading;
+ const canAdd=connectorForm.name.trim()&&connectorForm.url.trim()&&!connectorLoading;
+ const save=(patch)=>updateSettings(patch);
+ const toggleHaptics=async()=>{
+  const next=!settings.haptics;
+  const saved=await save({haptics:next});
+  if(saved?.haptics&&navigator.vibrate)navigator.vibrate(12);
+ };
 
- if(page==="connectors") return <div className="settings-screen">
-  <div className="settings-page">
-   <header className="settings-topbar">
-    <button type="button" className="settings-icon-btn" aria-label="Back to settings" onClick={()=>setPage("main")}><ArrowLeft size={25}/></button>
-    <h1>Connectors</h1><button type="button" className="settings-icon-btn" aria-label="Close settings" onClick={onClose}><X size={25}/></button>
-   </header>
-   <main className="settings-content">
-    <Section title="MCP & Connectors">
-     <div className="settings-inline-note"><Info size={18}/><span>Add a remote MCP server. Streamable HTTP and SSE are supported.</span></div>
-     <div className="connector-form settings-connector-form">
-      <input aria-label="Connector name" placeholder="Name (e.g. GitHub)" value={connectorForm.name} onChange={e=>setConnectorForm({...connectorForm,name:e.target.value})}/>
-      <select aria-label="Connector transport" value={connectorForm.transport} onChange={e=>setConnectorForm({...connectorForm,transport:e.target.value})}><option value="streamable-http">Streamable HTTP</option><option value="sse">SSE</option></select>
-      <input aria-label="MCP server URL" placeholder="MCP server URL" value={connectorForm.url} onChange={e=>setConnectorForm({...connectorForm,url:e.target.value})}/>
-      <input aria-label="Allowed tools" placeholder="Allowed tools (optional, comma separated)" value={connectorForm.allowed_tools} onChange={e=>setConnectorForm({...connectorForm,allowed_tools:e.target.value})}/><textarea aria-label="Authentication headers" className="settings-header-textarea" placeholder={`Headers JSON (optional), e.g. {"Authorization":"Bearer YOUR_TOKEN"}`} value={connectorForm.headers} onChange={e=>setConnectorForm({...connectorForm,headers:e.target.value})}/>
-      <button type="button" className="settings-primary-btn" onClick={addConnector} disabled={!canAdd}>{connectorLoading?"Adding...":"Add connector"}</button>
-     </div>
-    </Section>
-    <Section title="Your connectors">
-     {connectors.length===0?<div className="settings-empty">No connectors added yet.</div>:connectors.map(c=><div className="connector-card" key={c.id}>
-      <div className="connector-card-icon"><Plug size={19}/></div><div className="connector-card-copy"><strong>{c.name}</strong><small>{c.transport} · {c.url}</small></div>
-      <div className="connector-actions"><button type="button" onClick={()=>testConnector(c.id)} disabled={connectorTesting===c.id}>{connectorTesting===c.id?"Testing…":"Test"}</button><button type="button" className="delete-link" onClick={()=>deleteConnectorById(c.id)}>Delete</button></div>
-     </div>)}
-    </Section>
-   </main>
-  </div>
- </div>;
+ if(page==="appearance") return <div className="settings-screen"><div className="settings-page">
+  <header className="settings-topbar"><button className="settings-icon-btn" onClick={()=>setPage("main")}><ArrowLeft size={25}/></button><h1>Appearance</h1><span className="settings-topbar-spacer"/></header>
+  <main className="settings-content"><Section title="Theme">
+   {["System","Light","Dark"].map(x=><Row key={x} icon={Palette} title={x} subtitle={settings.appearance===x?"Selected":"Use "+x.toLowerCase()+" theme"} onClick={async()=>{const s=await save({appearance:x});if(s){document.documentElement.dataset.theme=x.toLowerCase()}}} toggle value={settings.appearance===x}/>)}
+  </Section></main></div></div>;
 
- return <div className="settings-screen" role="dialog" aria-modal="true" aria-label="Settings">
-  <div className="settings-page">
-   <header className="settings-topbar">
-    <button type="button" className="settings-icon-btn" aria-label="Close settings" onClick={onClose}><X size={29}/></button>
-    <h1>Settings</h1><span className="settings-topbar-spacer"/>
-   </header>
-   <main className="settings-content">
-    <button type="button" className="settings-profile">
-     <span className="settings-avatar">{initials}</span><span><strong>{name.toUpperCase()}</strong><small>{user?.email||""}</small></span>
-    </button>
-    <div className="settings-account-card"><div className="settings-account-icon"><Sparkles size={22}/></div><div><strong>Personal AI</strong><small>Personal assistant · Groq model</small></div><span className="settings-status"><Check size={15}/> Active</span></div>
+ if(page==="advanced") return <div className="settings-screen"><div className="settings-page">
+  <header className="settings-topbar"><button className="settings-icon-btn" onClick={()=>setPage("main")}><ArrowLeft size={25}/></button><h1>Advanced</h1><span className="settings-topbar-spacer"/></header>
+  <main className="settings-content"><Section title="AI & connection">
+   <Row icon={Globe2} title="Web Search" subtitle={settings.web_search?"Enabled":"Disabled"} onClick={()=>save({web_search:!settings.web_search})} toggle value={settings.web_search}/>
+   <Row icon={BrainCircuit} title="Memory" subtitle={settings.memory?"Enabled":"Disabled"} onClick={()=>save({memory:!settings.memory})} toggle value={settings.memory}/>
+  </Section><div className="settings-inline-note"><Info size={18}/><span>These preferences are stored on your account and are applied to new conversations.</span></div></main>
+ </div></div>;
 
-    <Section title="App">
-     <Row icon={Palette} title="Appearance" subtitle={appearance} onClick={()=>setAppearance(appearance==="System"?"Light":appearance==="Light"?"Dark":"System")}/>
-     <Row icon={Smartphone} title="Haptics" subtitle={haptics?"On":"Off"} onClick={()=>setHaptics(v=>!v)}/>
-     <Row icon={AppWindow} title="Widget" subtitle="Coming soon" disabled/>
-     <Row icon={Globe2} title="App Language" subtitle={language} onClick={()=>setLanguage(language==="English"?"Hindi":"English")}/>
-     <Row icon={SlidersHorizontal} title="Advanced" subtitle="Connection, model and app options" onClick={()=>{}}/>
-    </Section>
+ if(page==="customize") return <div className="settings-screen"><div className="settings-page">
+  <header className="settings-topbar"><button className="settings-icon-btn" onClick={()=>setPage("main")}><ArrowLeft size={25}/></button><h1>Customize Personal AI</h1><span className="settings-topbar-spacer"/></header>
+  <main className="settings-content"><Section title="Response style">
+   <select className="settings-select" value={style} onChange={e=>setStyle(e.target.value)}><option>Natural</option><option>Concise</option><option>Detailed</option></select>
+  </Section><Section title="Custom instructions">
+   <textarea className="settings-custom-textarea" maxLength={4000} value={instructions} onChange={e=>setInstructions(e.target.value)} placeholder="Tell your Personal AI how you want it to respond..."/>
+   <div className="settings-save-row"><small>{instructions.length}/4000</small><button className="settings-primary-btn" onClick={async()=>{const s=await save({custom_instructions:instructions,response_style:style});if(s)setPage("main")}} disabled={settingsLoading}><Save size={16}/>{settingsLoading?"Saving…":"Save changes"}</button></div>
+  </Section></main>
+ </div></div>;
 
-    <Section title="Personal AI">
-     <Row icon={Sparkles} title="Customize Personal AI" subtitle="Instructions and response preferences" onClick={()=>{}}/>
-     <Row icon={Plug} title="Connectors" subtitle={connectors.length?connectors.length+" connected":"Connect MCP servers"} onClick={()=>setPage("connectors")}/>
-     <Row icon={BrainCircuit} title="Memory" subtitle="Manage saved memories" onClick={()=>{}}/>
-     <Row icon={Shield} title="Privacy & Security" subtitle="Account and data settings" onClick={()=>{}}/>
-    </Section>
+ if(page==="connectors") return <div className="settings-screen"><div className="settings-page">
+  <header className="settings-topbar"><button className="settings-icon-btn" onClick={()=>setPage("main")}><ArrowLeft size={25}/></button><h1>Connectors</h1><button className="settings-icon-btn" onClick={onClose}><X size={25}/></button></header>
+  <main className="settings-content">
+   <Section title="MCP & Connectors">
+    <div className="settings-inline-note"><Info size={18}/><span>Use a Streamable HTTP or SSE MCP endpoint. Authentication headers are sent only from the backend.</span></div>
+    <div className="connector-form settings-connector-form">
+     <input aria-label="Connector name" placeholder="Name (e.g. GitHub)" value={connectorForm.name} onChange={e=>setConnectorForm({...connectorForm,name:e.target.value})}/>
+     <select aria-label="Connector transport" value={connectorForm.transport} onChange={e=>setConnectorForm({...connectorForm,transport:e.target.value})}><option value="streamable-http">Streamable HTTP</option><option value="sse">SSE</option></select>
+     <input aria-label="MCP server URL" placeholder="MCP server URL" value={connectorForm.url} onChange={e=>setConnectorForm({...connectorForm,url:e.target.value})}/>
+     <input aria-label="Allowed tools" placeholder="Allowed tools (optional, comma separated)" value={connectorForm.allowed_tools} onChange={e=>setConnectorForm({...connectorForm,allowed_tools:e.target.value})}/>
+     <textarea aria-label="Authentication headers" className="settings-header-textarea" placeholder={`Headers JSON (optional), e.g. {"Authorization":"Bearer YOUR_TOKEN"}`} value={connectorForm.headers} onChange={e=>setConnectorForm({...connectorForm,headers:e.target.value})}/>
+     <button type="button" className="settings-primary-btn" onClick={addConnector} disabled={!canAdd}>{connectorLoading?"Connecting…":"Add & connect"}</button>
+    </div>
+   </Section>
+   <Section title="Your connectors">
+    {connectors.length===0?<div className="settings-empty">No connectors added yet.</div>:connectors.map(c=><div className="connector-card" key={c.id}>
+      <div className={"connector-card-icon "+(c.status?.connected?"connected":"")}><Plug size={19}/></div>
+      <div className="connector-card-copy"><strong>{c.name}</strong><small>{c.transport} · {c.url}</small><small className={c.status?.connected?"connector-ok":"connector-error"}>{c.status?.connected?"Connected · "+(c.status.tools||0)+" tools":c.status?.error||"Not tested"}</small></div>
+      <div className="connector-actions"><button type="button" onClick={()=>testConnector(c.id)} disabled={connectorTesting===c.id}>{connectorTesting===c.id?<RefreshCw size={13} className="spin"/>:"Test"}</button><button type="button" className="delete-link" onClick={()=>deleteConnectorById(c.id)}>Delete</button></div>
+    </div>)}
+   </Section>
+  </main>
+ </div></div>;
 
-    <Section title="Data & Information">
-     <Row icon={Link2} title="Shared Conversations" subtitle="Manage shared links" onClick={()=>{}}/>
-     <Row icon={Database} title="Data Controls" subtitle="Your chats and files" onClick={()=>{}}/>
-     <Row icon={FileText} title="Open Source Licenses" onClick={()=>{}}/>
-     <Row icon={LockKeyhole} title="Privacy Policy" onClick={()=>{}}/>
-    </Section>
+ if(page==="privacy") return <div className="settings-screen"><div className="settings-page">
+  <header className="settings-topbar"><button className="settings-icon-btn" onClick={()=>setPage("main")}><ArrowLeft size={25}/></button><h1>Privacy & Security</h1><span className="settings-topbar-spacer"/></header>
+  <main className="settings-content"><Section title="Account">
+   <div className="settings-inline-note"><Shield size={18}/><span>Your chats, memories and connectors are scoped to your authenticated account. Connector authentication headers are never returned to the frontend.</span></div>
+   <Row icon={LogOut} title="Sign out" subtitle="Revoke this session" onClick={onSignOut}/>
+  </Section></main>
+ </div></div>;
 
-    <Section title="Support"><Row icon={CircleHelp} title="Report a Problem" onClick={()=>{}}/></Section>
-    <button type="button" className="settings-signout" onClick={onSignOut||onClose}><LogOut size={20}/> Sign out</button>
-    <footer className="settings-footer"><strong>Personal AI</strong><span>Version 1.0.0</span></footer>
-   </main>
-  </div>
- </div>;
+ return <div className="settings-screen" role="dialog" aria-modal="true" aria-label="Settings"><div className="settings-page">
+  <header className="settings-topbar"><button type="button" className="settings-icon-btn" onClick={onClose}><X size={29}/></button><h1>Settings</h1><span className="settings-topbar-spacer"/></header>
+  <main className="settings-content">
+   <div className="settings-profile"><span className="settings-avatar">{initials}</span><span><strong>{name.toUpperCase()}</strong><small>{user?.email||""}</small></span></div>
+   <div className="settings-account-card"><div className="settings-account-icon"><Sparkles size={22}/></div><div><strong>Personal AI</strong><small>Preferences synced with backend</small></div><span className="settings-status"><Check size={15}/> Active</span></div>
+
+   <Section title="App">
+    <Row icon={Palette} title="Appearance" subtitle={settings.appearance} onClick={()=>setPage("appearance")}/>
+    <Row icon={Smartphone} title="Haptics" subtitle={settings.haptics?"On":"Off"} onClick={toggleHaptics} toggle value={settings.haptics}/>
+    <Row icon={AppWindow} title="Widget" subtitle="Coming soon" disabled/>
+    <Row icon={Globe2} title="App Language" subtitle={settings.language} onClick={()=>save({language:settings.language==="English"?"Hindi":"English"})}/>
+    <Row icon={SlidersHorizontal} title="Advanced" subtitle="Web search and memory" onClick={()=>setPage("advanced")}/>
+   </Section>
+
+   <Section title="Personal AI">
+    <Row icon={Sparkles} title="Customize Personal AI" subtitle={settings.custom_instructions?"Custom instructions saved":"Instructions and response style"} onClick={()=>setPage("customize")}/>
+    <Row icon={Plug} title="Connectors" subtitle={connectors.length?connectors.length+" configured":"Connect MCP servers"} onClick={()=>setPage("connectors")}/>
+    <Row icon={BrainCircuit} title="Memory" subtitle={settings.memory?"Enabled":"Disabled"} onClick={onMemory}/>
+    <Row icon={Shield} title="Privacy & Security" subtitle="Account and connector security" onClick={()=>setPage("privacy")}/>
+   </Section>
+
+   <Section title="Data & Information">
+    <Row icon={Link2} title="Shared Conversations" subtitle="Sharing is not enabled yet" disabled/>
+    <Row icon={Database} title="Data Controls" subtitle="Chat and memory controls" onClick={onMemory}/>
+    <Row icon={FileText} title="Open Source Licenses" subtitle="Application dependencies" disabled/>
+    <Row icon={LockKeyhole} title="Privacy Policy" subtitle="Local application policy" disabled/>
+   </Section>
+
+   <Section title="Support"><Row icon={CircleHelp} title="Report a Problem" subtitle="Contact support from your device" onClick={()=>window.location.href="mailto:support@example.com?subject=Personal%20AI%20Assistant%20problem"}/></Section>
+   <button type="button" className="settings-signout" onClick={onSignOut}><LogOut size={20}/> Sign out</button>
+   <footer className="settings-footer"><strong>Personal AI</strong><span>Version 1.0.0</span></footer>
+  </main>
+ </div></div>;
 }
