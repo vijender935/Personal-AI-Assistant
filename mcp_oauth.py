@@ -44,12 +44,8 @@ class DatabaseOAuthStorage:
     def _write(self,tokens,client):
         with connect() as con:
             values=(self.connector_id,json.dumps(tokens) if tokens else None,json.dumps(client) if client else None,time.time())
-            if using_postgres():
-                con.execute("""INSERT INTO mcp_oauth_credentials(connector_id,tokens,client_info,updated_at) VALUES(?,?,?,?)
-                    ON CONFLICT(connector_id) DO UPDATE SET tokens=excluded.tokens,client_info=excluded.client_info,updated_at=excluded.updated_at""",values)
-            else:
-                con.execute("""INSERT INTO mcp_oauth_credentials(connector_id,tokens,client_info,updated_at) VALUES(?,?,?,?)
-                    ON CONFLICT(connector_id) DO UPDATE SET tokens=excluded.tokens,client_info=excluded.client_info,updated_at=excluded.updated_at""",values)
+            con.execute("""INSERT INTO mcp_oauth_credentials(connector_id,tokens,client_info,updated_at) VALUES(?,?,?,?)
+                ON CONFLICT(connector_id) DO UPDATE SET tokens=excluded.tokens,client_info=excluded.client_info,updated_at=excluded.updated_at""",values)
     async def get_tokens(self):
         tokens,_=self._read()
         return OAuthToken.model_validate(tokens) if tokens and OAuthToken else None
