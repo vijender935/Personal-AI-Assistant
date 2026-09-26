@@ -223,7 +223,33 @@ def stream_agent(goal, session_id="default", user_id=0, image_urls=None, rag_sou
             {"type": "image_url", "image_url": {"url": url}} for url in image_urls
         ]
 
+    # Fast path: ordinary conversational messages do not need a non-streaming
+    # tool-selection round. Stream the model response directly so simple messages
+    # require one Groq request instead of two.
+    if not tool_schemas:
+        try:
+            stream = client.chat.completions.create(
+                model=VISION_MODEL if image_urls else MODEL,
+                messages=messages,
+                temperature=0.4,
+                stream=True,
+            )
+            parts = []
+            for chunk in stream:
+                delta = chunk.choices[0].delta.content if chunk.choices else None
+                if delta:
+                    parts.append(delta)
+                    yield delta
+            answer = "".join(parts)
+            if answer:
+                save_turn(session_id, goal, answer, user_id=user_id)
+        except Exception:
+            logger.exception("Fast streaming request failed")
+            yield "❌ Streaming request failed."
+        return
+
     state = ExecutionState()
+    prepared_final_response = False
     while should_continue_execution(state, min(MAX_ITERATIONS, execution_plan.max_tool_rounds)):
         state.round_number += 1
         response = None
