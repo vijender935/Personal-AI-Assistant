@@ -12,7 +12,7 @@ function Section({title,children}){return <section className="settings-section">
 
 export default function SettingsModal({
  open,onClose,onMemory,user,connectorForm,setConnectorForm,connectorLoading,connectorTesting,
- addConnector,testConnector,connectors,deleteConnectorById,settings,settingsLoading,updateSettings,onSignOut,onClearChats
+ addConnector,testConnector,startOAuth,connectors,deleteConnectorById,settings,settingsLoading,updateSettings,onSignOut,onClearChats
 }){
  const [page,setPage]=useState("main");
  const [instructions,setInstructions]=useState("");
@@ -75,7 +75,7 @@ export default function SettingsModal({
     {connectors.length===0?<div className="settings-empty">No connectors added yet.</div>:connectors.map(c=><div className="connector-card" key={c.id}>
       <div className={"connector-card-icon "+(c.status?.connected?"connected":"")}><Plug size={19}/></div>
       <div className="connector-card-copy"><strong>{c.name}</strong><small>{c.transport} · {c.url}</small><small className={c.status?.connected?"connector-ok":"connector-error"}>{c.status?.connected?"Connected · "+(c.status.tools||0)+" tools":c.status?.error||"Not tested"}</small></div>
-      <div className="connector-actions"><button type="button" onClick={()=>testConnector(c.id)} disabled={connectorTesting===c.id}>{connectorTesting===c.id?<RefreshCw size={13} className="spin"/>:"Test"}</button><button type="button" className="delete-link" onClick={()=>deleteConnectorById(c.id)}>Delete</button></div>
+      <div className="connector-actions"><button type="button" onClick={()=>testConnector(c.id)} disabled={connectorTesting===c.id}>{connectorTesting===c.id?<RefreshCw size={13} className="spin"/>:"Test"}</button>{c.transport==="streamable-http"&&<button type="button" onClick={()=>startOAuth(c.id)}>OAuth</button>}<button type="button" className="delete-link" onClick={()=>deleteConnectorById(c.id)}>Delete</button></div>
     </div>)}
    </Section>
   </main>
