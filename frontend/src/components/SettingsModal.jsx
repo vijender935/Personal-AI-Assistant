@@ -35,7 +35,7 @@ export default function SettingsModal({open,onClose,user,connectorForm,setConnec
       <input aria-label="Connector name" placeholder="Name (e.g. GitHub)" value={connectorForm.name} onChange={e=>setConnectorForm({...connectorForm,name:e.target.value})}/>
       <select aria-label="Connector transport" value={connectorForm.transport} onChange={e=>setConnectorForm({...connectorForm,transport:e.target.value})}><option value="streamable-http">Streamable HTTP</option><option value="sse">SSE</option></select>
       <input aria-label="MCP server URL" placeholder="MCP server URL" value={connectorForm.url} onChange={e=>setConnectorForm({...connectorForm,url:e.target.value})}/>
-      <input aria-label="Allowed tools" placeholder="Allowed tools (optional, comma separated)" value={connectorForm.allowed_tools} onChange={e=>setConnectorForm({...connectorForm,allowed_tools:e.target.value})}/>
+      <input aria-label="Allowed tools" placeholder="Allowed tools (optional, comma separated)" value={connectorForm.allowed_tools} onChange={e=>setConnectorForm({...connectorForm,allowed_tools:e.target.value})}/><textarea aria-label="Authentication headers" className="settings-header-textarea" placeholder={`Headers JSON (optional), e.g. {"Authorization":"Bearer YOUR_TOKEN"}`} value={connectorForm.headers} onChange={e=>setConnectorForm({...connectorForm,headers:e.target.value})}/>
       <button type="button" className="settings-primary-btn" onClick={addConnector} disabled={!canAdd}>{connectorLoading?"Adding...":"Add connector"}</button>
      </div>
     </Section>
