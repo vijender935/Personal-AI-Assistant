@@ -21,7 +21,8 @@ class PostgresConnection:
     def execute(self,sql,params=None):
         return self._conn.execute(sql.replace("?", "%s"), params or ())
     def executemany(self,sql,seq):
-        return self._conn.executemany(sql.replace("?", "%s"),seq)
+        with self._conn.cursor() as cur:
+            return cur.executemany(sql.replace("?", "%s"),seq)
     def close(self):
         return self._conn.close()
 
