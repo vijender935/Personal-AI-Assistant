@@ -11,10 +11,15 @@ def test_permissions(monkeypatch):
  monkeypatch.setenv("MCP_SERVERS",'{"github":{"transport":"streamable-http","url":"https://example/mcp","allowed_tools":["list_issues"]}}')
  from mcp_registry import load_server_configs,tool_allowed
  c=load_server_configs()[0];assert c.name=="github" and tool_allowed(c,"list_issues") and not tool_allowed(c,"delete_repository")
-def test_connector_header_persistence(monkeypatch,tmp_path):
+def test_connector_header_persistence(monkeypatch):
  import connectors
- monkeypatch.setattr(connectors,"DB_PATH",str(tmp_path/"mcp.sqlite3"));monkeypatch.setattr(connectors,"ensure_directories",lambda:None);monkeypatch.delenv("ALLOW_LOCAL_MCP",raising=False)
- c=connectors.upsert_connector("github","streamable-http","https://example.com/mcp",headers={"Authorization":"Bearer secret"})
- assert c["headers"]["Authorization"]=="Bearer secret"
- updated=connectors.upsert_connector("github","streamable-http","https://example.com/mcp",headers={"Authorization":"Bearer new"})
- assert updated["headers"]=={"Authorization":"Bearer new"}
+ monkeypatch.delenv("ALLOW_LOCAL_MCP",raising=False)
+ name="github-test"
+ try:
+  c=connectors.upsert_connector(name,"streamable-http","https://example.com/mcp",headers={"Authorization":"Bearer secret"})
+  assert c["headers"]["Authorization"]=="Bearer secret"
+  updated=connectors.upsert_connector(name,"streamable-http","https://example.com/mcp",headers={"Authorization":"Bearer new"})
+  assert updated["headers"]=={"Authorization":"Bearer new"}
+ finally:
+  rows=[x for x in connectors.list_connectors() if x["name"]==name]
+  if rows: connectors.delete_connector(rows[0]["id"])
