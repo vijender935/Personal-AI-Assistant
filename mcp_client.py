@@ -198,13 +198,17 @@ async def _call_async(server_name: str, tool_name: str, arguments: dict[str, Any
 
 
 def _content_to_text(result: Any) -> str:
-    prefix = "MCP tool error" if getattr(result, "isError", False) else "MCP tool result"
+    is_error = bool(getattr(result, "is_error", getattr(result, "isError", False)))
+    prefix = "MCP tool error" if is_error else "MCP tool result"
     parts = []
     for item in getattr(result, "content", []) or []:
         text = getattr(item, "text", None)
         parts.append(text if text is not None else str(item))
-    if getattr(result, "structuredContent", None):
-        parts.append(str(result.structuredContent))
+    structured = getattr(result, "structured_content", None)
+    if structured is None:
+        structured = getattr(result, "structuredContent", None)
+    if structured is not None:
+        parts.append(str(structured))
     return prefix + ": " + ("\n".join(parts) if parts else "(empty)")
 
 
