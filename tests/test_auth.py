@@ -1,4 +1,4 @@
-import auth
+import auth,pytest
 def test_single_account_lifecycle(monkeypatch,tmp_path):
     monkeypatch.setattr(auth,"DB_PATH",tmp_path/"auth.db")
     auth.init_auth_db()
@@ -6,7 +6,7 @@ def test_single_account_lifecycle(monkeypatch,tmp_path):
     account=auth.setup_account("Vijender","vijender@example.com","StrongPass123")
     assert account["email"]=="vijender@example.com"
     assert auth.account_exists()
-    assert auth.setup_account if False else True
+    with pytest.raises(RuntimeError): auth.setup_account("Other","other@example.com","AnotherPass123")
     result=auth.login("vijender@example.com","StrongPass123")
     assert result
     token,logged= result
