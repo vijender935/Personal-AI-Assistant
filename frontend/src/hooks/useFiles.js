@@ -21,17 +21,21 @@ export default function useFiles({API,token,notify,setAttachments,requestDelete}
   }catch{notify("Could not load files")}
  },[API,token,notify]);
 
- async function uploadFile(file){
-  if(!file||uploading)return;
+ async function uploadFile(fileOrFiles){
+  const files=Array.isArray(fileOrFiles)?fileOrFiles:[fileOrFiles];
+  if(!files.length||uploading)return;
   setUploading(true);
   try{
-   const fd=new FormData();fd.append("file",file);
+   for(const file of files){
+    if(!file)continue;
+    const fd=new FormData();fd.append("file",file);
    const r=await fetch(API+"/api/v1/files/upload",{method:"POST",headers:{Authorization:"Bearer "+token},body:fd});
    const d=await r.json().catch(()=>({}));
-   if(!r.ok){notify(d.detail||"Upload failed");return}
-   if(!d.path||!d.name){notify("Upload failed: invalid server response");return}
+   if(!r.ok){notify(d.detail||"Upload failed");continue}
+   if(!d.path||!d.name){notify("Upload failed: invalid server response");continue}
    setAttachments(a=>[...a,{path:d.path,name:d.name}]);
-   await loadFiles();notify("File attached","success");
+   }
+   await loadFiles();notify("File(s) attached","success");
   }catch{notify("Upload failed")}
   finally{setUploading(false)}
  }
