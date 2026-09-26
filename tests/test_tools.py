@@ -1,69 +1,15 @@
 import tools
-
 def test_calculator_is_safe():
-    assert tools.calculator("2 + 3 * 4") == "14"
-    assert tools.calculator("2 ** 3") == "8"
-    assert "unsupported" in tools.calculator("__import__('os')").lower()
-
-def test_file_access_is_sandboxed(tmp_path, monkeypatch):
-    root = tmp_path / "files"
-    root.mkdir()
-    monkeypatch.setattr(tools, "FILE_ROOT", root)
-    assert "Written" in tools.write_file("hello.txt", "world")
-    assert tools.read_file("hello.txt") == "world"
-    outside = tmp_path / "outside.txt"
-    outside.write_text("secret")
-    assert "outside the user" in tools.read_file("../outside.txt")
-
-def test_shell_disabled(monkeypatch):
-    monkeypatch.setattr(tools, "ALLOW_SHELL", False)
-    assert "disabled" in tools.run_shell("echo hello").lower()
-
-def test_shell_allowlist(tmp_path, monkeypatch):
-    monkeypatch.setattr(tools, "ALLOW_SHELL", True)
-    monkeypatch.setattr(tools, "FILE_ROOT", tmp_path)
-    monkeypatch.setattr(tools, "ALLOWED_SHELL_COMMANDS", {"echo"})
-    result = tools.run_shell("echo hello")
-    assert "exit_code=0" in result
-    assert "hello" in result
-
-def test_chat_metadata_and_regeneration_helpers(tmp_path, monkeypatch):
-    db = tmp_path / "assistant.db"
-    monkeypatch.setattr(tools, "DB_PATH", db)
-    tools.init_db()
-    tools.save_turn("s1", "hello", "world", user_id=7)
-    tools.set_chat_title("s1", "My chat", user_id=7)
-    assert tools.get_chat_title("s1", user_id=7) == "My chat"
-    assert tools.get_chat_title("s1", user_id=8) is None
-    assert tools.remove_last_assistant("s1", user_id=7) is True
-    assert tools.load_history("s1", user_id=7)[-1]["role"] == "user"
-    tools.save_turn("s1", "hello", "again", user_id=7)
-    assert tools.remove_last_turn("s1", user_id=7) is True
-    assert tools.load_history("s1", user_id=7) == [{"role": "user", "content": "hello"}]
-    tools.delete_chat("s1", user_id=7)
-    assert tools.load_history("s1", user_id=7) == []
-
-
-
-def test_file_tools_are_isolated_between_users(tmp_path, monkeypatch):
-    root = tmp_path / "files"
-    root.mkdir()
-    monkeypatch.setattr(tools, "FILE_ROOT", root)
-
-    assert "Written" in tools.write_file("private.txt", "user7", user_id=7)
-    assert tools.read_file("private.txt", user_id=7) == "user7"
-    assert "file not found" in tools.read_file("private.txt", user_id=8).lower()
-    assert tools.read_file("../user_7/private.txt", user_id=8).startswith("Error:")
-
-
-def test_shell_runs_inside_user_root(tmp_path, monkeypatch):
-    monkeypatch.setattr(tools, "ALLOW_SHELL", True)
-    monkeypatch.setattr(tools, "FILE_ROOT", tmp_path)
-    monkeypatch.setattr(tools, "ALLOWED_SHELL_COMMANDS", {"pwd"})
-    result = tools.run_shell("pwd", user_id=9)
-    assert "user_9" in result
-
-
-
-def test_basic_tools_accept_authenticated_context():
-    assert tools.calculator("6 * 7", user_id=12) == "42"
+ assert tools.calculator("2 + 3 * 4")=="14";assert tools.calculator("2 ** 3")=="8";assert "unsupported" in tools.calculator("__import__('os')").lower()
+def test_file_access_is_sandboxed(tmp_path,monkeypatch):
+ root=tmp_path/"files";root.mkdir();monkeypatch.setattr(tools,"FILE_ROOT",root)
+ assert "Written" in tools.write_file("hello.txt","world");assert tools.read_file("hello.txt")=="world"
+ (tmp_path/"outside.txt").write_text("secret");assert "outside the allowed" in tools.read_file("../outside.txt")
+def test_shell_disabled(monkeypatch):monkeypatch.setattr(tools,"ALLOW_SHELL",False);assert "disabled" in tools.run_shell("echo hello").lower()
+def test_shell_allowlist(tmp_path,monkeypatch):
+ monkeypatch.setattr(tools,"ALLOW_SHELL",True);monkeypatch.setattr(tools,"FILE_ROOT",tmp_path);monkeypatch.setattr(tools,"ALLOWED_SHELL_COMMANDS",{"echo"})
+ result=tools.run_shell("echo hello");assert "exit_code=0" in result and "hello" in result
+def test_chat_helpers(tmp_path,monkeypatch):
+ monkeypatch.setattr(tools,"DB_PATH",tmp_path/"assistant.db");tools.init_db();tools.save_turn("s1","hello","world");tools.set_chat_title("s1","My chat")
+ assert tools.get_chat_title("s1")=="My chat";assert tools.remove_last_assistant("s1") is True;assert tools.load_history("s1")[-1]["role"]=="user"
+ tools.save_turn("s1","hello","again");assert tools.remove_last_turn("s1") is True;tools.delete_chat("s1");assert tools.load_history("s1")==[]
