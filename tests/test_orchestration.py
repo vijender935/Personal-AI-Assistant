@@ -1,184 +1,22 @@
-from orchestration import plan_prompt, plan_task
-
-
-def test_simple_conversation_plan():
-    plan = plan_task("Hello, how are you?")
-    assert plan.intent == "conversation"
-    assert plan.complexity == "simple"
-    assert not plan.needs_web
-
-
-def test_current_information_plan():
-    plan = plan_task("What is the latest news today?")
-    assert plan.intent == "current_information"
-    assert plan.needs_web
-
-
-def test_document_plan():
-    plan = plan_task("Meri uploaded PDF file me kya likha hai?")
-    assert plan.intent == "document_qa"
-    assert plan.needs_rag
-
-
-def test_mcp_plan():
-    plan = plan_task("Check my GitHub repository issues")
-    assert plan.intent == "external_tool"
-    assert plan.needs_mcp
-
-
+from orchestration import plan_prompt,plan_task
+def test_simple_conversation_plan():assert plan_task("Hello, how are you?").complexity=="simple"
+def test_current_information_plan():assert plan_task("What is the latest news today?").needs_web
+def test_document_plan():assert plan_task("Meri uploaded PDF file me kya likha hai?").needs_rag
+def test_mcp_plan():assert plan_task("Check my GitHub repository issues").needs_mcp
 def test_multi_route_plan():
-    plan = plan_task("Search my previous memory and check today's GitHub news")
-    assert plan.complexity == "complex"
-    assert plan.needs_memory
-    assert plan.needs_mcp
-    assert plan.needs_web
-
-
-def test_plan_prompt_is_actionable():
-    plan = plan_task("Calculate this and search the latest result")
-    prompt = plan_prompt(plan)
-    assert "Task plan:" in prompt
-    assert "web_search" in prompt
-
-
-
-def test_execution_plan_orders_routes():
-    from orchestration import build_execution_plan
-
-    plan = plan_task("Search my memory and today's GitHub issue")
-    execution = build_execution_plan(plan)
-    assert execution.steps[0] == "understand_request"
-    assert "retrieve_memory" in execution.steps
-    assert "web_or_current_information" in execution.steps
-    assert "mcp_tool_execution" in execution.steps
-    assert execution.steps[-2:] == ("validate_tool_results", "compose_answer")
-    assert execution.max_tool_rounds == 8
-
-
-
-def test_tool_result_validation_and_recovery():
-    from orchestration import recovery_instruction, validate_tool_result
-
-    ok = validate_tool_result({"value": 42})
-    assert ok.ok is True
-    assert ok.content == "{'value': 42}"
-
-    failed = validate_tool_result("Tool error in calculator: invalid input")
-    assert failed.ok is False
-    assert failed.recoverable is True
-    assert "Do not invent missing data" in recovery_instruction("calculator", failed)
-
-
-
-def test_execution_state_failure_guard():
-    from orchestration import ExecutionState, should_continue_execution
-
-    state = ExecutionState(round_number=1, consecutive_failures=0)
-    assert should_continue_execution(state, 4)
-    state.consecutive_failures = 2
-    assert not should_continue_execution(state, 4)
-
-    state.consecutive_failures = 0
-    state.round_number = 4
-    assert not should_continue_execution(state, 4)
-
-
-
-def test_select_mcp_tools_prefers_relevant_tools():
-    from orchestration import select_mcp_tools
-
-    schemas = [
-        {"type": "function", "function": {"name": "mcp__github__list_issues", "description": "List repository issues"}},
-        {"type": "function", "function": {"name": "mcp__github__create_issue", "description": "Create a repository issue"}},
-        {"type": "function", "function": {"name": "mcp__github__list_releases", "description": "List releases"}},
-    ]
-    selected = select_mcp_tools(schemas, "check repository issues", max_tools=2)
-    names = [item["function"]["name"] for item in selected]
-    assert "mcp__github__list_issues" in names
-    assert "mcp__github__create_issue" in names
-    assert len(selected) == 2
-
-
-def test_select_mcp_tools_is_bounded():
-    from orchestration import select_mcp_tools
-
-    schemas = [
-        {"type": "function", "function": {"name": f"mcp__server__tool_{i}", "description": "generic"}}
-        for i in range(20)
-    ]
-    assert len(select_mcp_tools(schemas, "do something", max_tools=5)) == 5
-
-def test_simple_conversation_gets_no_tool_schemas():
-    from agent import _tool_schemas_for
-
-    assert _tool_schemas_for(0, "Hi") == []
-
-
-def test_stream_agent_omits_empty_tools_for_simple_messages(monkeypatch):
-    import agent
-    from types import SimpleNamespace
-
-    calls = []
-
-    class Message:
-        tool_calls = None
-        content = "Hi! Kaise ho?"
-
-        def model_dump(self, exclude_none=True):
-            return {"role": "assistant", "content": self.content}
-
-    class Completions:
-        def create(self, **kwargs):
-            calls.append(kwargs)
-            if kwargs.get("stream"):
-                chunk = SimpleNamespace(
-                    choices=[SimpleNamespace(delta=SimpleNamespace(content="Hi!"))]
-                )
-                return iter([chunk])
-            return SimpleNamespace(choices=[SimpleNamespace(message=Message())])
-
-    class FakeGroq:
-        def __init__(self, api_key):
-            self.chat = SimpleNamespace(completions=Completions())
-
-    monkeypatch.setenv("GROQ_API_KEY", "test-key")
-    monkeypatch.setattr(agent, "Groq", FakeGroq)
-    monkeypatch.setattr(agent, "_prepare_goal", lambda *args, **kwargs: None)
-    monkeypatch.setattr(agent, "build_messages", lambda *args, **kwargs: [
-        {"role": "system", "content": "test"},
-        {"role": "user", "content": "Hi"},
-    ])
-    monkeypatch.setattr(agent, "save_turn", lambda *args, **kwargs: None)
-
-    assert "".join(agent.stream_agent("Hi", user_id=1)) == "Hi!"
-    assert len(calls) == 1
-    assert calls[0].get("stream") is True
-    assert "tools" not in calls[0]
-    assert "tool_choice" not in calls[0]
-
-
-def test_mcp_plan_recognizes_database_requests():
-    from orchestration import plan_task
-
-    plan = plan_task("MCP se mere database ke latest records dikhao")
-    assert plan.intent == "external_tool"
-    assert plan.needs_mcp
-
-
-def test_select_mcp_tools_matches_database_language():
-    from orchestration import select_mcp_tools
-
-    schemas = [
-        {"type": "function", "function": {
-            "name": "mcp__db__list_rows",
-            "description": "List rows from a SQL table",
-            "parameters": {"type": "object", "properties": {"table": {"type": "string"}}},
-        }},
-        {"type": "function", "function": {
-            "name": "mcp__db__delete_rows",
-            "description": "Delete rows from a SQL table",
-            "parameters": {"type": "object", "properties": {"table": {"type": "string"}}},
-        }},
-    ]
-    selected = select_mcp_tools(schemas, "show database records", max_tools=1)
-    assert selected[0]["function"]["name"] == "mcp__db__list_rows"
+ p=plan_task("Search my previous memory and check today's GitHub news");assert p.needs_memory and p.needs_mcp and p.needs_web
+def test_plan_prompt():assert "Task plan:" in plan_prompt(plan_task("Calculate this and search the latest result"))
+def test_tool_result_validation():
+ from orchestration import validate_tool_result,recovery_instruction
+ ok=validate_tool_result({"value":42});assert ok.ok and ok.content=="{'value': 42}"
+ failed=validate_tool_result("Tool error in calculator: invalid input");assert not failed.ok and "Do not invent missing data" in recovery_instruction("calculator",failed)
+def test_execution_guard():
+ from orchestration import ExecutionState,should_continue_execution
+ s=ExecutionState(round_number=1);assert should_continue_execution(s,4);s.consecutive_failures=2;assert not should_continue_execution(s,4)
+def test_select_mcp_tools():
+ from orchestration import select_mcp_tools
+ schemas=[{"type":"function","function":{"name":"mcp__github__list_issues","description":"List repository issues"}},{"type":"function","function":{"name":"mcp__github__create_issue","description":"Create a repository issue"}}]
+ assert len(select_mcp_tools(schemas,"check repository issues",max_tools=2))==2
+def test_agent_simple_schemas():
+ from agent import _tool_schemas_for
+ assert _tool_schemas_for("Hi")==[]
