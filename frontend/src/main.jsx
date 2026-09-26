@@ -39,7 +39,7 @@ function App(){
  const {chat,update,regenerate,editLastUser,send,stopStream,newChat}=useChat({API,token,chats,setChats,active,setActive,text,setText,attachments,setAttachments,loading,setLoading,notify,webSearch,memory});
  const {files,uploading,loadFiles,uploadFile,deleteFile,confirmDeleteFile,downloadFile}=useFiles({API,token,notify,setAttachments,requestDelete:setConfirmState});
  const {memories,memoryForm,setMemoryForm,loadMemories,saveMemory,deleteMemory}=useMemory({API,token,notify});
- const {connectors,connectorForm,setConnectorForm,connectorLoading,connectorTesting,loadConnectors,addConnector,testConnector,deleteConnectorById}=useMCP({API,token,notify});
+ const {connectors,connectorForm,setConnectorForm,connectorLoading,connectorTesting,loadConnectors,addConnector,testConnector,startOAuth,deleteConnectorById}=useMCP({API,token,notify});
  const {settings:userSettings,settingsLoading,loadSettings,updateSettings}=useSettings({API,token,notify});
 
 
@@ -101,7 +101,7 @@ function App(){
   </main>
   <FilesModal open={filesOpen} onClose={()=>setFilesOpen(false)} files={files} fileQuery={fileQuery} setFileQuery={setFileQuery} downloadFile={downloadFile} deleteFile={deleteFile}/>
   <MemoryModal open={memoryOpen} onClose={()=>setMemoryOpen(false)} memories={memories} memoryForm={memoryForm} setMemoryForm={setMemoryForm} saveMemory={saveMemory} deleteMemory={deleteMemory}/>
-  <SettingsModal onClearChats={clearAllChats} open={settings} onClose={()=>setSettings(false)} onSignOut={logout} onMemory={()=>{setSettings(false);setMemoryOpen(true);loadMemories()}} user={user} connectorForm={connectorForm} setConnectorForm={setConnectorForm} connectorLoading={connectorLoading} connectorTesting={connectorTesting} addConnector={addConnector} testConnector={testConnector} connectors={connectors} deleteConnectorById={deleteConnectorById} settings={userSettings} settingsLoading={settingsLoading} updateSettings={updateSettings}/>
+  <SettingsModal onClearChats={clearAllChats} open={settings} onClose={()=>setSettings(false)} onSignOut={logout} onMemory={()=>{setSettings(false);setMemoryOpen(true);loadMemories()}} user={user} connectorForm={connectorForm} setConnectorForm={setConnectorForm} connectorLoading={connectorLoading} connectorTesting={connectorTesting} addConnector={addConnector} testConnector={testConnector} startOAuth={startOAuth} connectors={connectors} deleteConnectorById={deleteConnectorById} settings={userSettings} settingsLoading={settingsLoading} updateSettings={updateSettings}/>
 
  </div>
 }
