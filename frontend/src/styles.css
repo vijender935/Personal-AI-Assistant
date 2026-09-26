@@ -9,3 +9,74 @@
 @media(max-width:700px){.add-menu{left:-8px;bottom:50px}.add-menu-grid button{padding:10px 4px}.composer-tools{overflow-x:auto;flex-wrap:nowrap;padding-bottom:2px}.tool-chip{white-space:nowrap}}
 
 .auth-submit:disabled{opacity:.65;cursor:wait}.auth-spinner{display:inline-block;width:13px;height:13px;border:2px solid #ffffff55;border-top-color:#fff;border-radius:50%;animation:spin .7s linear infinite;margin-right:8px;vertical-align:-2px}.auth-switch:disabled{opacity:.5;cursor:wait}
+/* Full-page settings inspired by the mobile grouped-settings pattern */
+.settings-screen{position:fixed;inset:0;z-index:50;background:#f3f3f3;overflow:auto;color:#171717}
+.settings-page{min-height:100%;width:100%;background:#f3f3f3}
+.settings-topbar{position:sticky;top:0;z-index:2;height:78px;border:0;background:#f3f3f3;display:grid;grid-template-columns:54px 1fr 54px;align-items:center;padding:0 max(18px,calc((100vw - 760px)/2));gap:4px}
+.settings-topbar h1{font-size:25px;line-height:1;margin:0;font-weight:700;text-align:left}
+.settings-icon-btn{width:44px;height:44px;border:0;background:transparent;display:grid;place-items:center;border-radius:50%;cursor:pointer;color:#171717}
+.settings-icon-btn:hover{background:#e7e7e7}
+.settings-topbar-spacer{width:44px}
+.settings-content{width:min(650px,calc(100vw - 28px));margin:0 auto;padding:10px 0 42px}
+.settings-profile,.settings-account-card,.settings-group{width:100%;background:#fff;border-radius:24px}
+.settings-profile{border:0;display:flex;align-items:center;gap:18px;text-align:left;padding:18px 24px;margin:0 0 18px;cursor:pointer;min-height:105px}
+.settings-profile:hover,.settings-account-card:hover{background:#fbfbfb}
+.settings-avatar{width:70px;height:70px;flex:0 0 70px;border-radius:50%;display:grid;place-items:center;background:#111827;color:#fff;font-size:25px;font-weight:700}
+.settings-profile>span:last-child{display:flex;flex-direction:column;gap:5px;min-width:0}
+.settings-profile strong{font-size:21px;letter-spacing:.01em}
+.settings-profile small{font-size:16px;color:#666;overflow:hidden;text-overflow:ellipsis}
+.settings-account-card{display:flex;align-items:center;gap:14px;padding:16px 20px;margin-bottom:30px;min-height:76px}
+.settings-account-icon{width:44px;height:44px;border-radius:14px;background:#f0f0f2;display:grid;place-items:center;flex:0 0 44px}
+.settings-account-card>div:nth-child(2){display:flex;flex-direction:column;gap:3px;min-width:0}
+.settings-account-card strong{font-size:16px}
+.settings-account-card small{color:#777;font-size:13px}
+.settings-status{margin-left:auto;display:flex;align-items:center;gap:4px;color:#287a43;font-size:12px;font-weight:700}
+.settings-section{margin:0 0 28px}
+.settings-section>h3{font-size:17px;color:#666;margin:0 0 10px 28px;font-weight:650}
+.settings-group{overflow:hidden}
+.settings-row{width:100%;min-height:72px;padding:12px 19px;border:0;border-bottom:1px solid #ededed;background:#fff;display:flex;align-items:center;gap:14px;text-align:left;font:inherit;color:#171717;cursor:pointer}
+.settings-row:last-child{border-bottom:0}
+.settings-row:hover{background:#fafafa}
+.settings-row:disabled{cursor:default;color:#aaa}
+.settings-row:disabled .settings-row-icon,.settings-row:disabled .settings-chevron{color:#aaa}
+.settings-row-icon{width:42px;height:42px;border-radius:12px;display:grid;place-items:center;color:#686868;flex:0 0 42px}
+.settings-row-copy{display:flex;flex-direction:column;gap:3px;min-width:0;flex:1}
+.settings-row-copy strong{font-size:16px;font-weight:650}
+.settings-row-copy small{font-size:13px;color:#777;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.settings-chevron{color:#999;flex:0 0 auto}
+.settings-signout{width:100%;min-height:64px;border:0;border-radius:24px;background:#fff;color:#d33b3b;display:flex;align-items:center;justify-content:center;gap:10px;font:inherit;font-weight:650;font-size:16px;cursor:pointer;margin:4px 0 30px}
+.settings-signout:hover{background:#fff5f5}
+.settings-footer{text-align:center;color:#888;font-size:13px;display:flex;flex-direction:column;gap:5px;padding-bottom:8px}
+.settings-footer strong{color:#555;font-size:14px}
+.settings-inline-note{display:flex;align-items:flex-start;gap:9px;padding:14px 16px;background:#f7f7f8;color:#666;font-size:13px;line-height:1.45;border-radius:14px;margin-bottom:12px}
+.settings-connector-form{padding:0!important;background:transparent!important}
+.settings-connector-form input,.settings-connector-form select{background:#fff!important;border:1px solid #dedee2!important;border-radius:14px!important;padding:13px!important}
+.settings-primary-btn{width:100%;border:0;border-radius:14px;padding:13px;background:#171717;color:#fff;font-weight:650;cursor:pointer}
+.settings-primary-btn:disabled{opacity:.55;cursor:wait}
+.settings-empty{padding:18px;color:#777;text-align:center}
+.connector-card{display:flex;align-items:center;gap:12px;padding:14px 16px;border-bottom:1px solid #ededed}
+.connector-card:last-child{border-bottom:0}
+.connector-card-icon{width:40px;height:40px;border-radius:11px;background:#f0f0f2;display:grid;place-items:center;color:#555;flex:0 0 40px}
+.connector-card-copy{display:flex;flex-direction:column;gap:3px;min-width:0;flex:1}
+.connector-card-copy strong{font-size:15px}
+.connector-card-copy small{font-size:12px;color:#777;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.connector-actions{display:flex;gap:4px;flex:0 0 auto}
+.connector-actions button{border:0;background:#f1f1f3;border-radius:9px;padding:7px 9px;cursor:pointer;font:inherit;font-size:12px}
+.connector-actions .delete-link{color:#c33;background:transparent}
+@media(max-width:700px){
+ .settings-topbar{height:74px;padding:0 14px}
+ .settings-topbar h1{font-size:24px}
+ .settings-content{width:calc(100vw - 28px);padding-top:8px}
+ .settings-profile{min-height:96px;padding:15px 18px;border-radius:22px}
+ .settings-avatar{width:62px;height:62px;flex-basis:62px;font-size:22px}
+ .settings-profile strong{font-size:18px}
+ .settings-profile small{font-size:14px}
+ .settings-account-card{border-radius:20px;margin-bottom:25px}
+ .settings-section{margin-bottom:25px}
+ .settings-section>h3{margin-left:18px;font-size:16px}
+ .settings-group{border-radius:20px}
+ .settings-row{min-height:68px;padding:11px 15px}
+ .settings-row-copy strong{font-size:15px}
+ .settings-row-copy small{font-size:12px}
+ .settings-signout{border-radius:20px}
+}
