@@ -233,7 +233,8 @@ def test_mcp_connector(connector_id: int, user=Depends(current_user)):
     try:
         from mcp_client import discover_tool_schemas
         schemas = discover_tool_schemas(user["id"])
-        prefix = "mcp__" + connector["name"].replace(" ", "_") + "__"
+        from mcp_client import _safe_tool_component
+        prefix = "mcp__" + _safe_tool_component(connector["name"]) + "__"
         matching = [s for s in schemas if str(s.get("function", {}).get("name", "")).startswith(prefix)]
         return {"ok": True, "tools": len(matching)}
     except Exception as exc:
