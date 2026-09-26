@@ -1,6 +1,6 @@
 """Database backend with SQLite for local development and PostgreSQL for Render persistence."""
 from __future__ import annotations
-import os,sqlite3
+import os, sqlite3
 from pathlib import Path
 DATABASE_URL=os.getenv("DATABASE_URL","").strip()
 def using_postgres(): return bool(DATABASE_URL)
@@ -16,5 +16,6 @@ class PostgresConnection:
     def close(self): return self._conn.close()
 def connect(path:Path|str|None=None):
     if using_postgres(): return PostgresConnection(DATABASE_URL)
-    target=path if path is not None else os.getenv("AGENT_DB","data/agent_memory.db")
+    target=Path(path if path is not None else os.getenv("AGENT_DB","data/agent_memory.db"))
+    target.parent.mkdir(parents=True,exist_ok=True)
     return sqlite3.connect(target)
