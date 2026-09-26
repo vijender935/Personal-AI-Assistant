@@ -13,3 +13,4 @@ pymupdf
 python-docx
 psycopg[binary]
 boto3
+httpx2
