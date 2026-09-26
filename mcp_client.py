@@ -64,13 +64,32 @@ def _server_target(config):
 @contextlib.asynccontextmanager
 async def _client_context(config):
     headers = getattr(config, "headers", {}) or {}
-    if config.transport == "streamable-http" and headers:
+    if config.transport == "streamable-http":
         import httpx2
         from mcp import Client
         from mcp.client.streamable_http import streamable_http_client
         timeout = _timeout_seconds()
+        auth = None
+        try:
+            from mcp_oauth import DatabaseOAuthStorage, oauth_token_present, oauth_redirect_uri
+            if getattr(config, "connector_id", None) and oauth_token_present(config.user_id, config.connector_id):
+                from mcp.client.auth import OAuthClientProvider
+                from mcp.shared.auth import OAuthClientMetadata
+                from pydantic import AnyUrl
+                auth = OAuthClientProvider(
+                    server_url=config.url,
+                    client_metadata=OAuthClientMetadata(
+                        client_name="Personal AI Assistant",
+                        redirect_uris=[AnyUrl(oauth_redirect_uri())],
+                        application_type="web",
+                    ),
+                    storage=DatabaseOAuthStorage(config.user_id, config.connector_id),
+                )
+        except Exception as exc:
+            logger.warning("MCP OAuth setup skipped for %s: %s", config.name, exc)
         async with httpx2.AsyncClient(
             headers=headers,
+            auth=auth,
             timeout=httpx2.Timeout(timeout, read=max(timeout, 300.0)),
         ) as http_client:
             transport = streamable_http_client(config.url, http_client=http_client)
