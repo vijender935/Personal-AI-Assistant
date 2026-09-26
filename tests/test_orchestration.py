@@ -151,8 +151,7 @@ def test_stream_agent_omits_empty_tools_for_simple_messages(monkeypatch):
     monkeypatch.setattr(agent, "save_turn", lambda *args, **kwargs: None)
 
     assert "".join(agent.stream_agent("Hi", user_id=1)) == "Hi!"
-    assert len(calls) == 2
+    assert len(calls) == 1
+    assert calls[0].get("stream") is True
     assert "tools" not in calls[0]
     assert "tool_choice" not in calls[0]
-    assert "tools" not in calls[1]
-    assert "tool_choice" not in calls[1]
