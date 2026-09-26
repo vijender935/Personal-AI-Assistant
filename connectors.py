@@ -101,14 +101,11 @@ def upsert_connector(name,transport,url,allowed_tools=None,headers=None):
     if len(header_map)>30: raise ValueError("Too many MCP headers.")
     init_connectors_db(); _migrate_legacy_schema()
     with connect() as con:
-        if using_postgres():
-            con.execute("""INSERT INTO mcp_connectors(name,transport,url,headers,allowed_tools,enabled)
-                VALUES(?,?,?,?,?,TRUE) ON CONFLICT(name) DO UPDATE SET transport=excluded.transport,url=excluded.url,headers=excluded.headers,allowed_tools=excluded.allowed_tools,enabled=TRUE""",
-                (name,transport,url,json.dumps(header_map),json.dumps(tools)))
-        else:
-            con.execute("""INSERT INTO mcp_connectors(name,transport,url,headers,allowed_tools,enabled)
-                VALUES(?,?,?,?,?,1) ON CONFLICT(name) DO UPDATE SET transport=excluded.transport,url=excluded.url,headers=excluded.headers,allowed_tools=excluded.allowed_tools,enabled=1""",
-                (name,transport,url,json.dumps(header_map),json.dumps(tools)))
+        con.execute("""INSERT INTO mcp_connectors(name,transport,url,headers,allowed_tools,enabled)
+            VALUES(?,?,?,?,?,TRUE)
+            ON CONFLICT(name) DO UPDATE SET transport=excluded.transport,url=excluded.url,
+            headers=excluded.headers,allowed_tools=excluded.allowed_tools,enabled=TRUE""",
+            (name,transport,url,json.dumps(header_map),json.dumps(tools)))
     return next(x for x in list_connectors() if x["name"]==name)
 
 def delete_connector(connector_id):
