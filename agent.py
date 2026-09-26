@@ -32,28 +32,72 @@ def _extract_memory_candidate(text):
     return None
 
 def build_messages(goal, session_id, user_id=0, rag_sources=None, memory_enabled=True):
-    history = load_history(session_id, MAX_HISTORY_MESSAGES, user_id=user_id)
+    # Groq's on-demand tier currently enforces a relatively small TPM/request
+    # budget. Long conversations can otherwise grow past the limit and produce
+    # intermittent 413/token rate-limit failures. Keep the prompt bounded while
+    # preserving the newest turns.
+    max_context_chars = max(8000, int(os.getenv("MAX_CONTEXT_CHARS", "24000")))
+    max_history = min(MAX_HISTORY_MESSAGES, max(4, int(os.getenv("MAX_CONTEXT_HISTORY", "12"))))
+    history = load_history(session_id, max_history, user_id=user_id)
     plan = plan_task(goal)
+
+    messages = [
+        {"role": "system", "content": SYSTEM_PROMPT},
+        {"role": "system", "content": plan_prompt(plan)},
+    ]
+    used_chars = sum(len(str(m["content"])) for m in messages) + len(goal)
+
     # Avoid vector/RAG lookups for ordinary conversation; they add latency and
     # are only useful when the request actually asks for memory/document context.
     memories = semantic_recall_memories(goal, limit=8, user_id=user_id) if (memory_enabled and plan.needs_memory) else []
-    messages = [{"role": "system", "content": SYSTEM_PROMPT}, {"role": "system", "content": plan_prompt(plan)}]
-    if memories:
+    if memories and used_chars < max_context_chars:
+        memory_text = "Relevant saved memories (semantic retrieval):\n" + "\n".join(
+            f"- {m}" for m in memories
+        )
         messages.append({
             "role": "system",
-            "content": "Relevant saved memories (semantic retrieval):\n" + "\n".join(f"- {m}" for m in memories),
+            "content": memory_text[:min(4000, max_context_chars - used_chars)],
         })
+        used_chars += len(messages[-1]["content"])
+
     try:
         from memory import search_rag
         rag_results = search_rag(goal, limit=4, user_id=user_id, sources=rag_sources) if (rag_sources or plan.needs_rag) else []
     except Exception:
         rag_results = []
-    if rag_results:
+    if rag_results and used_chars < max_context_chars:
         context = "\n\n".join(
             f"[{item['source']} | score={item['score']}]\n{item['content']}" for item in rag_results
         )
-        messages.append({"role": "system", "content": "Relevant knowledge-base context:\n" + context})
-    messages.extend(history)
+        remaining = max_context_chars - used_chars
+        rag_text = ("Relevant knowledge-base context:\n" + context)[:min(8000, remaining)]
+        messages.append({"role": "system", "content": rag_text})
+        used_chars += len(rag_text)
+
+    # Add the newest conversation turns first, walking backwards until the
+    # bounded context budget is reached. Never send an oversized historical
+    # answer just because it is a single database row.
+    remaining = max_context_chars - used_chars - len(goal)
+    selected = []
+    for item in reversed(history):
+        content = str(item.get("content", ""))
+        if not content:
+            continue
+        content = content[:6000]
+        cost = len(content)
+        if selected and cost > remaining:
+            continue
+        if cost > remaining:
+            content = content[-remaining:] if remaining > 0 else ""
+            cost = len(content)
+        if not content:
+            break
+        selected.append({"role": item["role"], "content": content})
+        remaining -= cost
+        if remaining <= 0:
+            break
+
+    messages.extend(reversed(selected))
     messages.append({"role": "user", "content": goal})
     return messages
 
