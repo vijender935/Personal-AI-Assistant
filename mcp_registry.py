@@ -15,7 +15,7 @@ class MCPServerConfig:
     command: str | None = None
     args: tuple[str, ...] = ()
     url: str | None = None
-    headers: dict[str, str] = None
+    headers: dict[str, str] | None = None
     allowed_tools: tuple[str, ...] = ()
 
 
