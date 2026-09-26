@@ -27,7 +27,7 @@ function App(){
 
  useEffect(()=>{if(user){loadFiles();loadConnectors();loadMemories()}},[user]);
  const {chat,update,regenerate,editLastUser,send,stopStream,newChat}=useChat({API,token,chats,setChats,active,setActive,text,setText,attachments,setAttachments,loading,setLoading,notify});
- const {files,uploading,loadFiles,uploadFile,deleteFile,confirmDeleteFile,downloadFile}=useFiles({API,token,notify,setAttachments});
+ const {files,uploading,loadFiles,uploadFile,deleteFile,confirmDeleteFile,downloadFile}=useFiles({API,token,notify,setAttachments,requestDelete:setConfirmState});
  const {memories,memoryForm,setMemoryForm,loadMemories,saveMemory,deleteMemory}=useMemory({API,token,notify});
  const {connectors,connectorForm,setConnectorForm,connectorLoading,loadConnectors,addConnector,deleteConnectorById}=useMCP({API,token,notify});
 
