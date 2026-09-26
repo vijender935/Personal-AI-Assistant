@@ -142,9 +142,7 @@ def search_rag(query,limit=4,sources=None):
     if not rows:return []
     q=_vector(_embedding(query,"query")); scored=[]
     for source,content,blob in rows:
-        try:
-            score=float(q @ _vector(blob))
-            if score > 0: scored.append((score,source,content))
+        try: scored.append((float(q @ _vector(blob)),source,content))
         except Exception: continue
     scored.sort(key=lambda x:-x[0])
     return [{"source":s,"content":c,"score":round(score,4)} for score,s,c in scored[:limit]]
