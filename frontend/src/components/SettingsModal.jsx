@@ -12,7 +12,7 @@ function Section({title,children}){return <section className="settings-section">
 
 export default function SettingsModal({
  open,onClose,onMemory,user,connectorForm,setConnectorForm,connectorLoading,connectorTesting,
- addConnector,testConnector,connectors,deleteConnectorById,settings,settingsLoading,updateSettings
+ addConnector,testConnector,connectors,deleteConnectorById,settings,settingsLoading,updateSettings,onSignOut
 }){
  const [page,setPage]=useState("main");
  const [instructions,setInstructions]=useState("");
@@ -114,7 +114,7 @@ export default function SettingsModal({
     <Row icon={LockKeyhole} title="Privacy Policy" subtitle="Local application policy" disabled/>
    </Section>
 
-   <Section title="Support"><Row icon={CircleHelp} title="Report a Problem" subtitle="Contact support from your device" onClick={()=>window.location.href="mailto:support@example.com?subject=Personal%20AI%20Assistant%20problem"}/></Section>
+   <Section title="Support"><Row icon={CircleHelp} title="Report a Problem" subtitle="Contact support from your device" onClick={()=>alert("Please use the GitHub repository issue tracker to report a problem.")}/></Section>
    <button type="button" className="settings-signout" onClick={onSignOut}><LogOut size={20}/> Sign out</button>
    <footer className="settings-footer"><strong>Personal AI</strong><span>Version 1.0.0</span></footer>
   </main>
