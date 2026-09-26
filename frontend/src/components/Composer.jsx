@@ -1,8 +1,8 @@
 import React from "react";
-import {Send,Paperclip,X,Globe,Brain,FolderPlus,Plug} from "lucide-react";
+import {Send,Paperclip,X,Globe,Brain,Plug} from "lucide-react";
 import FileUpload from "./FileUpload";
 
-export default function Composer({text,setText,loading,send,stopStream,uploadFile,attachments,setAttachments,uploading,webSearch,setWebSearch,memory,setMemory,onProject,onConnectors}){
+export default function Composer({text,setText,loading,send,stopStream,uploadFile,attachments,setAttachments,uploading,webSearch,setWebSearch,memory,setMemory,onConnectors}){
  return <div className="composer-wrap">
   <div className="composer">
    <FileUpload onFiles={uploadFile} disabled={loading||uploading}/>
@@ -12,7 +12,6 @@ export default function Composer({text,setText,loading,send,stopStream,uploadFil
   {(webSearch||memory)&&<div className="composer-tools">
    <button className={"tool-chip "+(webSearch?"on":"")} onClick={()=>setWebSearch(x=>!x)}><Globe size={14}/>Web search</button>
    <button className={"tool-chip "+(memory?"on":"")} onClick={()=>setMemory(x=>!x)}><Brain size={14}/>Memory</button>
-   <button className="tool-chip" onClick={onProject}><FolderPlus size={14}/>Project</button>
    <button className="tool-chip" onClick={onConnectors}><Plug size={14}/>Connectors</button>
   </div>}
   {attachments.length>0&&<div className="attachments">{attachments.map(a=><span className="attachment" key={a.path}><Paperclip size={12}/>{a.name}<button onClick={()=>setAttachments(xs=>xs.filter(x=>x.path!==a.path))}><X size={12}/></button></span>)}</div>}
