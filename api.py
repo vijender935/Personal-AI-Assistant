@@ -282,7 +282,7 @@ def chat(request: ChatRequest, user=Depends(current_user)):
 
 @app.post("/api/v1/chat/stream")
 def chat_stream(request: ChatRequest, raw_request: Request, user=Depends(current_user)):
-    _check_chat_rate_limit(f"stream:{user['id']}:{_client_key(raw_request)}")
+    _check_chat_rate_limit(f"chat:{user['id']}:{_client_key(raw_request)}")
     if not os.getenv("GROQ_API_KEY"):
         raise HTTPException(status_code=503, detail="GROQ_API_KEY is not configured.")
     attachment_urls = []
