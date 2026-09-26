@@ -17,7 +17,7 @@ const API=import.meta.env.VITE_API_URL || "http://127.0.0.1:8000";
 const initial=[{id:"new",title:"New conversation",messages:[]}];
 
 function App(){
- const [chats,setChats]=useState(initial),[active,setActive]=useState("new"),[text,setText]=useState(""),[loading,setLoading]=useState(false),[sidebar,setSidebar]=useState(true),[settings,setSettings]=useState(false),[filesOpen,setFilesOpen]=useState(false),[fileQuery,setFileQuery]=useState(""),[user,setUser]=useState(null),[auth,setAuth]=useState({email:"",password:"",name:""}),[authMode,setAuthMode]=useState("login"),[attachments,setAttachments]=useState([]),[chatQuery,setChatQuery]=useState(""),[copiedMessage,setCopiedMessage]=useState(null),[memoryOpen,setMemoryOpen]=useState(false),[toast,setToast]=useState(null),[confirmState,setConfirmState]=useState(null),[editState,setEditState]=useState(null),[renameState,setRenameState]=useState(null),[webSearch,setWebSearch]=useState(true),[memory,setMemory]=useState(true);
+ const [chats,setChats]=useState(initial),[active,setActive]=useState("new"),[text,setText]=useState(""),[loading,setLoading]=useState(false),[sidebar,setSidebar]=useState(true),[settings,setSettings]=useState(false),[filesOpen,setFilesOpen]=useState(false),[fileQuery,setFileQuery]=useState(""),[user,setUser]=useState(null),[auth,setAuth]=useState({email:"",password:"",name:""}),[authMode,setAuthMode]=useState("login"),[authLoading,setAuthLoading]=useState(false),[attachments,setAttachments]=useState([]),[chatQuery,setChatQuery]=useState(""),[copiedMessage,setCopiedMessage]=useState(null),[memoryOpen,setMemoryOpen]=useState(false),[toast,setToast]=useState(null),[confirmState,setConfirmState]=useState(null),[editState,setEditState]=useState(null),[renameState,setRenameState]=useState(null),[webSearch,setWebSearch]=useState(true),[memory,setMemory]=useState(true);
  const token=localStorage.getItem("personal_ai_token");
  function notify(message,type="error"){setToast({message,type});window.clearTimeout(notify.timer);notify.timer=window.setTimeout(()=>setToast(null),3200)}
 
@@ -36,6 +36,10 @@ function App(){
 
  async function logout(){try{if(token)await fetch(API+"/api/v1/auth/logout",{method:"POST",headers:{Authorization:"Bearer "+token}})}catch(e){}localStorage.removeItem("personal_ai_token");setUser(null);setChats(initial);setActive("new");}
  async function authSubmit(){
+ if(authLoading)return;
+ const email=auth.email.trim(),password=auth.password;
+ if(!email||!password){notify("Email and password are required");return}
+ setAuthLoading(true);
  try{
   const path=authMode==="login"?"/api/v1/auth/login":"/api/v1/auth/register";
   const body=authMode==="login"?{email:auth.email.trim(),password:auth.password}:auth;
@@ -63,7 +67,7 @@ function App(){
   setChats(remaining.length?remaining:[{id:"new",title:"New conversation",messages:[]}]);
   if(active===id)setActive(remaining[0]?.id||"new");
  }
- if(!user&&!token)return <div className="auth-screen"><div className="auth-card"><div className="welcome-logo">✦</div><h1>{authMode==="login"?"Welcome back":"Create account"}</h1>{authMode==="register"&&<input placeholder="Name" value={auth.name} onChange={e=>setAuth({...auth,name:e.target.value})}/>}<input placeholder="Email" type="email" value={auth.email} onChange={e=>setAuth({...auth,email:e.target.value})}/><input placeholder="Password" type="password" value={auth.password} onChange={e=>setAuth({...auth,password:e.target.value})}/><button className="auth-submit" onClick={authSubmit}>{authMode==="login"?"Login":"Sign up"}</button><button className="auth-switch" onClick={()=>setAuthMode(authMode==="login"?"register":"login")}>{authMode==="login"?"Create an account":"Already have an account? Login"}</button></div></div>;
+ if(!user&&!token)return <div className="auth-screen"><div className="auth-card"><div className="welcome-logo">✦</div><h1>{authMode==="login"?"Welcome back":"Create account"}</h1>{authMode==="register"&&<input placeholder="Name" value={auth.name} onChange={e=>setAuth({...auth,name:e.target.value})}/>}<input placeholder="Email" type="email" value={auth.email} onChange={e=>setAuth({...auth,email:e.target.value})}/><input placeholder="Password" type="password" value={auth.password} onChange={e=>setAuth({...auth,password:e.target.value})}/><button className="auth-submit" onClick={authSubmit} disabled={authLoading}>{authLoading?<><span className="auth-spinner"/>{authMode==="login"?"Signing in…":"Creating account…"}</>:authMode==="login"?"Sign in":"Sign up"}</button><button className="auth-switch" disabled={authLoading} onClick={()=>setAuthMode(authMode==="login"?"register":"login")}>{authMode==="login"?"Create an account":"Already have an account? Login"}</button></div></div>;
 
  return <div className="app">
   <Sidebar chats={chats} active={active} sidebar={sidebar} setSidebar={setSidebar} chatQuery={chatQuery} setChatQuery={setChatQuery} newChat={newChat} setActive={setActive} renameChat={renameChat} deleteChatById={deleteChatById} onFiles={()=>{setFilesOpen(true);loadFiles()}} onMemory={()=>{setMemoryOpen(true);loadMemories()}} onSettings={()=>setSettings(true)} logout={logout}/>
