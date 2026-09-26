@@ -4,6 +4,7 @@ from __future__ import annotations
 import asyncio
 import os
 import time
+import contextlib
 from typing import Any
 
 from mcp import Client
@@ -31,7 +32,7 @@ def _registry_key(user_id: int = 0) -> str:
     try:
         from connectors import list_connectors
         personal = list_connectors(user_id)
-        personal_key = repr([(x["id"], x["name"], x["transport"], x["url"], x["allowed_tools"], x["enabled"]) for x in personal])
+        personal_key = repr([(x["id"], x["name"], x["transport"], x["url"], x.get("headers", {}), x["allowed_tools"], x["enabled"]) for x in personal])
     except Exception:
         personal_key = ""
     return f"{user_id}|{os.getenv('MCP_SERVERS', '').strip()}|{personal_key}"
@@ -48,7 +49,7 @@ def _server_target(config):
             raise ValueError(f"MCP server {config.name!r} has no URL.")
         from mcp.client.sse import sse_client
         from connectors import validate_connector_url
-        return sse_client(validate_connector_url(config.url, resolve_dns=True))
+        return sse_client(validate_connector_url(config.url, resolve_dns=True), headers=getattr(config, "headers", {}) or {}, timeout=_timeout_seconds(), sse_read_timeout=_timeout_seconds())
     if config.transport == "stdio":
         if not config.command:
             raise ValueError(f"MCP server {config.name!r} has no command.")
@@ -57,12 +58,33 @@ def _server_target(config):
     raise ValueError(f"Unsupported MCP transport: {config.transport}")
 
 
+@contextlib.asynccontextmanager
+async def _client_context(config):
+    headers = getattr(config, "headers", {}) or {}
+    if config.transport == "streamable-http" and headers:
+        import httpx2
+        from mcp import Client
+        from mcp.client.streamable_http import streamable_http_client
+        timeout = _timeout_seconds()
+        async with httpx2.AsyncClient(
+            headers=headers,
+            timeout=httpx2.Timeout(timeout, read=max(timeout, 300.0)),
+        ) as http_client:
+            transport = streamable_http_client(config.url, http_client=http_client)
+            async with Client(transport, read_timeout_seconds=timeout) as client:
+                yield client
+        return
+    target = _server_target(config)
+    from mcp import Client
+    async with Client(target, read_timeout_seconds=_timeout_seconds()) as client:
+        yield client
+
+
 async def _discover_async(user_id: int = 0) -> list[dict[str, Any]]:
     discovered = []
     for config in load_server_configs(user_id):
         try:
-            target = _server_target(config)
-            async with Client(target, read_timeout_seconds=_timeout_seconds()) as client:
+            async with _client_context(config) as client:
                 result = await client.list_tools()
                 for tool in result.tools:
                     if not tool_allowed(config, tool.name):
@@ -102,8 +124,7 @@ async def _call_async(server_name: str, tool_name: str, arguments: dict[str, Any
         raise ValueError(f"MCP server {server_name!r} is not configured.")
     if not tool_allowed(config, tool_name):
         raise PermissionError(f"MCP tool {tool_name!r} is not allowed for server {server_name!r}.")
-    target = _server_target(config)
-    async with Client(target, read_timeout_seconds=_timeout_seconds()) as client:
+    async with _client_context(config) as client:
         return await client.call_tool(tool_name, arguments)
 
 
