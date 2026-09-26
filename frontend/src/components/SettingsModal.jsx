@@ -17,7 +17,10 @@ export default function SettingsModal({
  const [page,setPage]=useState("main");
  const [instructions,setInstructions]=useState("");
  const [style,setStyle]=useState("Natural");
- useEffect(()=>{if(open){setPage("main");setInstructions(settings?.custom_instructions||"");setStyle(settings?.response_style||"Natural")}},[open,settings]);
+ useEffect(()=>{
+  if(open){setPage("main");setInstructions(settings?.custom_instructions||"");setStyle(settings?.response_style||"Natural")}
+  if(settings?.appearance)document.documentElement.dataset.theme=settings.appearance.toLowerCase();
+ },[open,settings?.custom_instructions,settings?.response_style,settings?.appearance]);
  if(!open)return null;
 
  const name=user?.name?.trim()||user?.email?.split("@")[0]||"User";
