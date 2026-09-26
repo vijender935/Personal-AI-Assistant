@@ -10,7 +10,7 @@ function Row({icon:Icon,title,subtitle,onClick,disabled=false}){
 }
 function Section({title,children}){return <section className="settings-section"><h3>{title}</h3><div className="settings-group">{children}</div></section>}
 
-export default function SettingsModal({open,onClose,user,connectorForm,setConnectorForm,connectorLoading,connectorTesting,addConnector,testConnector,connectors,deleteConnectorById}){
+export default function SettingsModal({open,onClose,user,connectorForm,setConnectorForm,connectorLoading,connectorTesting,addConnector,testConnector,connectors,deleteConnectorById,onSignOut}){
  const [page,setPage]=useState("main");
  const [appearance,setAppearance]=useState("System");
  const [language,setLanguage]=useState("English");
@@ -84,7 +84,7 @@ export default function SettingsModal({open,onClose,user,connectorForm,setConnec
     </Section>
 
     <Section title="Support"><Row icon={CircleHelp} title="Report a Problem" onClick={()=>{}}/></Section>
-    <button type="button" className="settings-signout" onClick={onClose}><LogOut size={20}/> Sign out</button>
+    <button type="button" className="settings-signout" onClick={onSignOut||onClose}><LogOut size={20}/> Sign out</button>
     <footer className="settings-footer"><strong>Personal AI</strong><span>Version 1.0.0</span></footer>
    </main>
   </div>
