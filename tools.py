@@ -36,13 +36,34 @@ def save_turn(session_id,user_text,assistant_text,user_id=0):
 def load_history(session_id,limit=30,user_id=0):
     limit=max(1,int(limit))
     with connect(DB_PATH) as con:
-        rows=con.execute("SELECT role,content FROM messages WHERE session_id=? AND user_id=? ORDER BY id DESC LIMIT ?",(session_id,user_id,limit)).fetchall()
+        rows=con.execute(
+            "SELECT role,content FROM messages WHERE session_id=? AND user_id=? ORDER BY id DESC LIMIT ?",
+            (session_id,user_id,limit),
+        ).fetchall()
+
+    # Concurrent/double submits can create:
+    # user, user, assistant, assistant.
+    # Normalize those duplicate turns at the read boundary without deleting
+    # the underlying records. A genuinely repeated question after an answer
+    # remains intact because it is separated by an assistant turn.
     history=[]
+    pending_duplicate_user=None
     for role,content in reversed(rows):
-        item={"role":role,"content":content}
-        if history and history[-1]["role"]==role and history[-1]["content"]==content:
-            continue
-        history.append(item)
+        if role=="user":
+            if history and history[-1]["role"]=="user" and history[-1]["content"]==content:
+                pending_duplicate_user=content
+                continue
+            history.append({"role":"user","content":content})
+            pending_duplicate_user=None
+        elif role=="assistant":
+            if (history and history[-1]["role"]=="assistant"
+                    and history[-1]["content"]==content):
+                continue
+            if pending_duplicate_user is not None and history and history[-1]["role"]=="assistant":
+                pending_duplicate_user=None
+            history.append({"role":"assistant","content":content})
+        else:
+            history.append({"role":role,"content":content})
     return history
 def list_sessions(user_id=0,limit=50):
     limit=max(1,min(int(limit),100))
