@@ -81,8 +81,9 @@ def test_mcp_connector_header_persistence(monkeypatch, tmp_path):
 
 def test_mcp_connector_config_keeps_identity(monkeypatch):
     import mcp_registry
+    import connectors
     monkeypatch.setattr(
-        mcp_registry,
+        connectors,
         "get_connector_configs",
         lambda user_id: [{
             "id": 42,
