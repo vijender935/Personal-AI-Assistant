@@ -22,6 +22,14 @@ from mcp.shared.auth import OAuthClientInformationFull, OAuthClientMetadata, OAu
 from pydantic import AnyUrl
 
 
+def oauth_redirect_uri() -> str:
+    configured = os.getenv("MCP_OAUTH_REDIRECT_URI", "").strip()
+    if configured:
+        return configured
+    base = os.getenv("PUBLIC_API_URL", "https://personal-ai-assistant-api-dwp6.onrender.com").rstrip("/")
+    return f"{base}/api/v1/mcp/oauth/callback"
+
+
 def init_oauth_db() -> None:
     ensure_directories()
     with connect(DB_PATH) as con:
