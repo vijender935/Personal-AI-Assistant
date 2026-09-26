@@ -77,7 +77,7 @@ function App(){
   </main>
   <FilesModal open={filesOpen} onClose={()=>setFilesOpen(false)} files={files} fileQuery={fileQuery} setFileQuery={setFileQuery} downloadFile={downloadFile} deleteFile={deleteFile}/>
   <MemoryModal open={memoryOpen} onClose={()=>setMemoryOpen(false)} memories={memories} memoryForm={memoryForm} setMemoryForm={setMemoryForm} saveMemory={saveMemory} deleteMemory={deleteMemory}/>
-  <SettingsModal open={settings} onClose={()=>setSettings(false)} user={user} connectorForm={connectorForm} setConnectorForm={setConnectorForm} connectorLoading={connectorLoading} addConnector={addConnector} connectors={connectors} deleteConnectorById={deleteConnectorById}/>
+  <SettingsModal open={settings} onClose={()=>setSettings(false)} user={user} connectorForm={connectorForm} setConnectorForm={setConnectorForm} connectorLoading={connectorLoading} connectorTesting={connectorTesting} addConnector={addConnector} testConnector={testConnector} connectors={connectors} deleteConnectorById={deleteConnectorById}/>
 
  </div>
 }
