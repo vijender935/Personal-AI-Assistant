@@ -2,7 +2,7 @@
 
 A single-user personal AI assistant built with Python, FastAPI, React/Vite, Groq, persistent chat history, semantic memory, RAG, local file tools, multimodal attachments, and MCP connectors.
 
-This repository is intentionally designed for one personal instance, not as a multi-user SaaS application. There is no account system, login/registration flow, per-user ID, or per-user database partitioning.
+This repository is intentionally designed for one personal instance, not as a multi-user SaaS application. It has exactly one account with a login screen and persistent session so the personal instance can be protected without introducing multi-user data partitioning.
 
 ## Features
 
@@ -77,7 +77,8 @@ This repository is intentionally designed for one personal instance, not as a mu
 - Memory manager.
 - Settings for appearance, AI behavior, customization, connectors, privacy and data controls.
 - Mobile-responsive layout.
-- No login or registration screen.
+- Single-account login and first-run account setup screen.
+- Account management for name/email, password change and sign out.
 
 ## Architecture
 
@@ -188,6 +189,14 @@ export MCP_SERVERS='{
 ~~~
 
 MCP discovery reads all available tool pages and filters them through configured allowlists before exposing schemas to the model.
+
+## Authentication and persistence
+
+- Exactly one account can be configured. A second account cannot be created.
+- Passwords are stored as PBKDF2-SHA256 password hashes; raw passwords are never stored.
+- Authentication uses an HttpOnly session cookie backed by the persistent database.
+- All application API routes are protected after login.
+- Render deployments require DATABASE_URL when REQUIRE_PERSISTENT_DB=1, preventing accidental fallback to ephemeral SQLite.
 
 ## Deployment
 
