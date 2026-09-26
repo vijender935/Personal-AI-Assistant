@@ -14,7 +14,7 @@ from tools import init_db,recall_memories,remember_fact,load_history,list_sessio
 from memory import init_semantic_store,index_document,search_rag,rag_source_status,delete_semantic_memory,delete_rag_source,remember_semantic
 from multimodal import save_upload,image_data_url,ensure_local_file,delete_upload,list_uploads
 from mcp_registry import registry_snapshot
-from connectors import init_connectors_db,list_connectors,upsert_connector,delete_connector
+from connectors import init_connectors_db,list_connectors,upsert_connector,delete_connector,update_connector_status
 from preferences import init_preferences_db,get_preferences,update_preferences
 from document_parser import extract_and_limit,is_supported_document
 from auth import SESSION_COOKIE,SESSION_DAYS,init_auth_db,account_exists,setup_account,login as auth_login,get_account_for_session,logout as auth_logout,update_account,change_password
@@ -145,21 +145,38 @@ def reset_settings(): return {"settings":update_preferences({})}
 def get_mcp_connectors(): return {"connectors":list_connectors(redact_headers=True)}
 @app.post("/api/v1/mcp/connectors")
 def add_mcp_connector(request:MCPConnectorRequest):
-    try:connector=upsert_connector(request.name,request.transport,request.url,request.allowed_tools,request.headers)
-    except ValueError as exc:raise HTTPException(status_code=400,detail=str(exc)) from exc
-    status={"connected":False,"tools":0,"tool_names":[]}
+    try:
+        connector=upsert_connector(
+            request.name,
+            request.transport,
+            request.url,
+            request.allowed_tools,
+            request.headers,
+        )
+    except ValueError as exc:
+        raise HTTPException(status_code=400,detail=str(exc)) from exc
+
     try:
         from mcp_client import discover_connector_diagnostics
         status=discover_connector_diagnostics(connector["name"])
-    except Exception as exc:status={"connected":False,"tools":0,"tool_names":[],"error":str(exc)[:500]}
-    connector["headers"]={k:"***" for k in connector.get("headers",{})}; connector["status"]=status
+    except Exception as exc:
+        status={"connected":False,"tools":0,"tool_names":[],"error":str(exc)[:500]}
+
+    connector=update_connector_status(connector["id"],status) or connector
+    connector["headers"]={k:"***" for k in connector.get("headers",{})}
     return {"connector":connector,"status":status}
+
 @app.post("/api/v1/mcp/connectors/{connector_id}/test")
 def test_mcp_connector(connector_id:int):
     connector=next((x for x in list_connectors() if x["id"]==connector_id),None)
-    if not connector:raise HTTPException(status_code=404,detail="Connector not found.")
-    from mcp_client import discover_connector_diagnostics
-    status=discover_connector_diagnostics(connector["name"])
+    if not connector:
+        raise HTTPException(status_code=404,detail="Connector not found.")
+    try:
+        from mcp_client import discover_connector_diagnostics
+        status=discover_connector_diagnostics(connector["name"])
+    except Exception as exc:
+        status={"connected":False,"tools":0,"tool_names":[],"error":str(exc)[:500]}
+    update_connector_status(connector_id,status)
     return {"ok":bool(status.get("connected")),**status}
 @app.post("/api/v1/mcp/connectors/{connector_id}/oauth/start")
 async def start_mcp_oauth(connector_id:int):
