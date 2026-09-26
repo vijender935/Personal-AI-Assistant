@@ -7,7 +7,7 @@ import logging
 from typing import Optional
 
 from fastapi import Depends, FastAPI, File, Header, HTTPException, UploadFile, Request
-from fastapi.responses import FileResponse, StreamingResponse
+from fastapi.responses import FileResponse, StreamingResponse, HTMLResponse
 from fastapi.middleware.cors import CORSMiddleware
 from starlette.middleware.base import BaseHTTPMiddleware
 from pydantic import BaseModel, Field
@@ -279,6 +279,62 @@ def test_mcp_connector(connector_id: int, user=Depends(current_user)):
     except Exception as exc:
         logger.exception("MCP connector test failed: %s", connector["name"])
         return {"ok": False, "connected": False, "tools": 0, "tool_names": [], "error": str(exc)[:500]}
+
+
+@app.post("/api/v1/mcp/connectors/{connector_id}/oauth/start")
+async def start_mcp_oauth(connector_id: int, request: Request, user=Depends(current_user)):
+    connector = next((x for x in list_connectors(user["id"]) if x["id"] == connector_id), None)
+    if not connector:
+        raise HTTPException(status_code=404, detail="Connector not found.")
+    try:
+        from mcp_oauth import begin_oauth, oauth_redirect_uri
+        result = await begin_oauth(user["id"], connector_id, oauth_redirect_uri())
+        return result
+    except Exception as exc:
+        logger.exception("MCP OAuth start failed: %s", connector.get("name"))
+        raise HTTPException(status_code=502, detail=str(exc)[:500]) from exc
+
+
+@app.get("/api/v1/mcp/oauth/callback")
+async def mcp_oauth_callback(
+    code: str | None = None,
+    state: str | None = None,
+    iss: str | None = None,
+    flow_id: str | None = None,
+    error: str | None = None,
+):
+    if error:
+        return HTMLResponse(f"<h2>MCP authorization failed</h2><p>{error[:300]}</p>", status_code=400)
+    if not flow_id or not code:
+        return HTMLResponse("<h2>MCP authorization failed</h2><p>Missing OAuth callback parameters.</p>", status_code=400)
+    try:
+        from mcp_oauth import complete_oauth
+        await complete_oauth(flow_id, code, state, iss)
+        return HTMLResponse(
+            "<h2>MCP connected</h2><p>You can return to Personal AI Assistant.</p>"
+            "<script>window.close()</script>"
+        )
+    except Exception as exc:
+        logger.exception("MCP OAuth callback failed")
+        return HTMLResponse(f"<h2>MCP authorization failed</h2><p>{str(exc)[:500]}</p>", status_code=400)
+
+
+@app.get("/api/v1/mcp/connectors/{connector_id}/oauth/status")
+def get_mcp_oauth_status(connector_id: int, user=Depends(current_user)):
+    try:
+        from mcp_oauth import oauth_status
+        return oauth_status(user["id"], connector_id)
+    except ValueError as exc:
+        raise HTTPException(status_code=404, detail=str(exc)) from exc
+
+
+@app.delete("/api/v1/mcp/connectors/{connector_id}/oauth")
+def remove_mcp_oauth(connector_id: int, user=Depends(current_user)):
+    try:
+        from mcp_oauth import clear_oauth
+        return {"deleted": clear_oauth(user["id"], connector_id)}
+    except ValueError as exc:
+        raise HTTPException(status_code=404, detail=str(exc)) from exc
 
 
 @app.delete("/api/v1/mcp/connectors/{connector_id}")
