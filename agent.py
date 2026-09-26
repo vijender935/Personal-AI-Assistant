@@ -31,9 +31,9 @@ def _extract_memory_candidate(text):
             return text.strip()[len(prefix):].strip()
     return None
 
-def build_messages(goal, session_id, user_id=0, rag_sources=None):
+def build_messages(goal, session_id, user_id=0, rag_sources=None, memory_enabled=True):
     history = load_history(session_id, MAX_HISTORY_MESSAGES, user_id=user_id)
-    memories = semantic_recall_memories(goal, limit=8, user_id=user_id)
+    memories = semantic_recall_memories(goal, limit=8, user_id=user_id) if memory_enabled else []
     plan = plan_task(goal)
     messages = [{"role": "system", "content": SYSTEM_PROMPT}, {"role": "system", "content": plan_prompt(plan)}]
     if memories:
@@ -55,7 +55,7 @@ def build_messages(goal, session_id, user_id=0, rag_sources=None):
     messages.append({"role": "user", "content": goal})
     return messages
 
-def _tool_schemas_for(user_id, goal):
+def _tool_schemas_for(user_id, goal, web_search_enabled=True):
     """Return only tools appropriate for the classified request.
 
     Simple conversational messages intentionally receive no tool schemas. This
@@ -67,7 +67,7 @@ def _tool_schemas_for(user_id, goal):
         return []
 
     schemas = []
-    if plan.needs_web:
+    if plan.needs_web and web_search_enabled:
         schemas.extend(
             schema for schema in TOOL_SCHEMAS
             if schema.get("function", {}).get("name") == "web_search"
@@ -128,8 +128,8 @@ def run_agent(goal, session_id="default", user_id=0, image_urls=None, rag_source
     task_plan = plan_task(goal)
     execution_plan = build_execution_plan(task_plan)
     client = Groq(api_key=api_key)
-    messages = build_messages(goal, session_id, user_id=user_id, rag_sources=rag_sources)
-    tool_schemas = _tool_schemas_for(user_id, goal)
+    messages = build_messages(goal, session_id, user_id=user_id, rag_sources=rag_sources, memory_enabled=memory_enabled)
+    tool_schemas = _tool_schemas_for(user_id, goal, web_search_enabled=web_search_enabled)
 
     if image_urls:
         messages[-1]["content"] = [{"type": "text", "text": goal}] + [
@@ -196,7 +196,7 @@ def run_agent(goal, session_id="default", user_id=0, image_urls=None, rag_source
         return "⚠️ Tool execution repeatedly failed. Maine unsafe/infinite retry se bachne ke liye execution stop kar diya."
     return f"⚠️ Max tool iterations ({MAX_ITERATIONS}) reached — task incomplete reh gaya."
 
-def stream_agent(goal, session_id="default", user_id=0, image_urls=None, rag_sources=None):
+def stream_agent(goal, session_id="default", user_id=0, image_urls=None, rag_sources=None, memory_enabled=True, web_search_enabled=True):
     """Execute tools first when required, then stream the final assistant response.
 
     This keeps the frontend streaming endpoint compatible with calculator/web/file/MCP
@@ -215,8 +215,8 @@ def stream_agent(goal, session_id="default", user_id=0, image_urls=None, rag_sou
     task_plan = plan_task(goal)
     execution_plan = build_execution_plan(task_plan)
     client = Groq(api_key=api_key)
-    messages = build_messages(goal, session_id, user_id=user_id, rag_sources=rag_sources)
-    tool_schemas = _tool_schemas_for(user_id, goal)
+    messages = build_messages(goal, session_id, user_id=user_id, rag_sources=rag_sources, memory_enabled=memory_enabled)
+    tool_schemas = _tool_schemas_for(user_id, goal, web_search_enabled=web_search_enabled)
 
     if image_urls:
         messages[-1]["content"] = [{"type": "text", "text": goal}] + [
