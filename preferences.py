@@ -1,14 +1,14 @@
 """Persistent application preferences for the single personal assistant."""
 from __future__ import annotations
 import json
-from config import DB_PATH, ensure_directories
-from db import connect, using_postgres
+from config import ensure_directories
+from db import connect
 
 DEFAULTS={"appearance":"System","haptics":True,"language":"English","web_search":True,"memory":True,"custom_instructions":"","response_style":"Natural"}
 
 def init_preferences_db():
     ensure_directories()
-    with connect(DB_PATH) as con:
+    with connect() as con:
         # Remove the legacy account-scoped preferences table.
         try: con.execute("DROP TABLE IF EXISTS user_preferences")
         except Exception: pass
@@ -29,7 +29,7 @@ def _clean(data):
 
 def get_preferences():
     init_preferences_db()
-    with connect(DB_PATH) as con: row=con.execute("SELECT preferences FROM preferences WHERE id=1").fetchone()
+    with connect() as con: row=con.execute("SELECT preferences FROM preferences WHERE id=1").fetchone()
     if not row:return dict(DEFAULTS)
     try: raw=json.loads(row[0])
     except (TypeError,json.JSONDecodeError): raw={}
@@ -37,9 +37,6 @@ def get_preferences():
 
 def update_preferences(updates):
     current=get_preferences(); current.update({k:v for k,v in updates.items() if k in DEFAULTS}); cleaned=_clean(current)
-    with connect(DB_PATH) as con:
-        if using_postgres():
-            con.execute("""INSERT INTO preferences(id,preferences) VALUES(1,?) ON CONFLICT(id) DO UPDATE SET preferences=excluded.preferences""",(json.dumps(cleaned,ensure_ascii=False),))
-        else:
-            con.execute("""INSERT INTO preferences(id,preferences) VALUES(1,?) ON CONFLICT(id) DO UPDATE SET preferences=excluded.preferences""",(json.dumps(cleaned,ensure_ascii=False),))
+    with connect() as con:
+        con.execute("""INSERT INTO preferences(id,preferences) VALUES(1,?) ON CONFLICT(id) DO UPDATE SET preferences=excluded.preferences""",(json.dumps(cleaned,ensure_ascii=False),))
     return cleaned
