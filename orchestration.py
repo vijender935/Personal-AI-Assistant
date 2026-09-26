@@ -107,7 +107,7 @@ def validate_tool_result(result: object) -> ToolResult:
     if not content:
         return ToolResult(False, "Tool returned an empty result.", recoverable=True)
     lowered = content.lower()
-    if lowered.startswith(("tool error", "unknown tool", "error:")):
+    if lowered.startswith(("tool error", "mcp tool error", "unknown tool", "error:")):
         return ToolResult(False, content, recoverable=True)
     return ToolResult(True, content)
 
