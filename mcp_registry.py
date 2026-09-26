@@ -15,6 +15,7 @@ class MCPServerConfig:
     command: str | None = None
     args: tuple[str, ...] = ()
     url: str | None = None
+    headers: dict[str, str] = None
     allowed_tools: tuple[str, ...] = ()
 
 
@@ -45,12 +46,16 @@ def _env_server_configs() -> list[MCPServerConfig]:
             continue
         transport = item.get("transport", "")
         allowed_tools = item.get("allowed_tools", [])
+        headers = item.get("headers", {})
         if not isinstance(allowed_tools, list) or not all(isinstance(x, str) for x in allowed_tools):
             allowed_tools = []
+        if not isinstance(headers, dict) or not all(isinstance(k, str) and isinstance(v, str) for k,v in headers.items()):
+            headers = {}
         common = dict(
             name=name,
             transport=transport,
             allowed_tools=tuple(x.strip() for x in allowed_tools if x.strip()),
+            headers={k.strip(): v.strip() for k,v in headers.items() if k.strip()},
         )
         if transport == "stdio":
             configs.append(MCPServerConfig(
@@ -86,6 +91,7 @@ def load_server_configs(user_id: int | None = None) -> list[MCPServerConfig]:
                     name=item["name"],
                     transport=item["transport"],
                     url=item["url"],
+                    headers=item.get("headers", {}) or {},
                     allowed_tools=tuple(item["allowed_tools"]),
                 )
             )
@@ -107,6 +113,7 @@ def registry_snapshot(user_id: int | None = None) -> list[dict[str, object]]:
             "command": item.command,
             "args": list(item.args),
             "url": item.url,
+            "headers": {key: "***" for key in (item.headers or {})},
             "allowed_tools": list(item.allowed_tools),
         }
         for item in load_server_configs(user_id)
