@@ -21,6 +21,7 @@ from auth import authenticate, create_session, create_user, get_user, init_auth_
 from multimodal import save_upload, read_upload, image_data_url, ensure_local_file, delete_upload, list_uploads, _safe_path
 from mcp_registry import registry_snapshot
 from connectors import init_connectors_db, list_connectors, upsert_connector, delete_connector
+from preferences import init_preferences_db, get_preferences, update_preferences
 from document_parser import extract_and_limit, is_supported_document
 
 logger = logging.getLogger(__name__)
@@ -69,6 +70,7 @@ ensure_directories()
 init_db()
 init_auth_db()
 init_connectors_db()
+init_preferences_db()
 
 app = FastAPI(
     title="Personal AI Assistant API",
@@ -198,6 +200,35 @@ def info():
     }
 
 
+class PreferencesRequest(BaseModel):
+    appearance: Optional[str] = None
+    haptics: Optional[bool] = None
+    language: Optional[str] = None
+    web_search: Optional[bool] = None
+    memory: Optional[bool] = None
+    custom_instructions: Optional[str] = Field(default=None, max_length=4000)
+    response_style: Optional[str] = None
+
+
+@app.get("/api/v1/settings")
+def get_settings(user=Depends(current_user)):
+    return {"settings": get_preferences(user["id"])}
+
+
+@app.patch("/api/v1/settings")
+def patch_settings(request: PreferencesRequest, user=Depends(current_user)):
+    updates = request.model_dump(exclude_none=True)
+    try:
+        return {"settings": update_preferences(user["id"], updates)}
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+
+
+@app.post("/api/v1/settings/reset")
+def reset_settings(user=Depends(current_user)):
+    return {"settings": update_preferences(user["id"], {})}
+
+
 class MCPConnectorRequest(BaseModel):
     name: str = Field(..., min_length=1, max_length=80)
     transport: str = Field(default="streamable-http")
@@ -224,25 +255,21 @@ def add_mcp_connector(request: MCPConnectorRequest, user=Depends(current_user)):
         )
     except ValueError as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc
-    connector["headers"] = {key: "***" for key in connector.get("headers", {})}
-    return {"connector": connector}
 
-
-@app.post("/api/v1/mcp/connectors/{connector_id}/test")
+    status = {"connected": False, "tools": 0, "tool_names": []}
+    try:
+        from mcp_client import discover_conn@app.post("/api/v1/mcp/connectors/{connector_id}/test")
 def test_mcp_connector(connector_id: int, user=Depends(current_user)):
     connector = next((x for x in list_connectors(user["id"]) if x["id"] == connector_id), None)
     if not connector:
         raise HTTPException(status_code=404, detail="Connector not found.")
     try:
-        from mcp_client import discover_connector_tool_schemas
-        matching = discover_connector_tool_schemas(user["id"], connector["name"])
-        return {"ok": True, "tools": len(matching), "tool_names": [s.get("function", {}).get("name") for s in matching]}
+        from mcp_client import discover_connector_diagnostics
+        status = discover_connector_diagnostics(user["id"], connector["name"])
+        return {"ok": bool(status.get("connected")), **status}
     except Exception as exc:
         logger.exception("MCP connector test failed: %s", connector["name"])
-        detail = str(exc).strip() or "Unknown MCP connection error."
-        if len(detail) > 500:
-            detail = detail[:500]
-        raise HTTPException(status_code=502, detail=f"MCP connector test failed: {detail}") from exc
+        return {"ok": False, "connected": False, "tools": 0, "tool_names": [], "error": str(exc)[:500]}
 
 
 @app.delete("/api/v1/mcp/connectors/{connector_id}")
