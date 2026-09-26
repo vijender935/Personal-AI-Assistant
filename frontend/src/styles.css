@@ -80,3 +80,5 @@
  .settings-row-copy small{font-size:12px}
  .settings-signout{border-radius:20px}
 }
+
+.settings-header-textarea{width:100%;min-height:82px;resize:vertical;border:1px solid #dedee2;border-radius:14px;padding:13px;font:12px ui-monospace,SFMono-Regular,Menlo,monospace;outline:0;background:#fff}
