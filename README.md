@@ -101,7 +101,7 @@ Agent runtime
                          +--> configured servers
                          +--> OAuth
      |
-     +--> SQLite / PostgreSQL
+     +--> PostgreSQL
      +--> local file root / optional R2
 ~~~
 
@@ -118,7 +118,7 @@ Persistent state is global to this assistant instance:
 - mcp_connectors(...)
 - mcp_oauth_credentials(connector_id, ...)
 
-Legacy user_id columns are removed by initialization/migration paths where applicable. Authentication tables and the old auth.py module are no longer part of the application.
+Legacy user_id columns are removed by initialization/migration paths where applicable. Authentication tables are stored in PostgreSQL alongside application state.
 
 ## Project structure
 
@@ -169,7 +169,7 @@ cd frontend && npm test && npm run build
 
 ## Important configuration
 
-GROQ_API_KEY, GROQ_MODEL, GROQ_VISION_MODEL, MAX_ITERATIONS, MAX_RETRIES, MAX_HISTORY_MESSAGES, MAX_CONTEXT_HISTORY, MAX_CONTEXT_CHARS, AGENT_DATA_DIR, AGENT_FILE_ROOT, AGENT_DB, ALLOW_SHELL, ALLOWED_SHELL_COMMANDS, SHELL_TIMEOUT, CORS_ORIGINS, MCP_SERVERS, MCP_ALLOWED_SERVERS, MCP_TIMEOUT_SECONDS, MCP_DISCOVERY_TTL_SECONDS, PUBLIC_BASE_URL, R2_ENDPOINT, R2_BUCKET, R2_ACCESS_KEY_ID and R2_SECRET_ACCESS_KEY are supported.
+GROQ_API_KEY, GROQ_MODEL, GROQ_VISION_MODEL, MAX_ITERATIONS, MAX_RETRIES, MAX_HISTORY_MESSAGES, MAX_CONTEXT_HISTORY, MAX_CONTEXT_CHARS, AGENT_DATA_DIR, AGENT_FILE_ROOT, DATABASE_URL, ALLOW_SHELL, ALLOWED_SHELL_COMMANDS, SHELL_TIMEOUT, CORS_ORIGINS, MCP_SERVERS, MCP_ALLOWED_SERVERS, MCP_TIMEOUT_SECONDS, MCP_DISCOVERY_TTL_SECONDS, PUBLIC_BASE_URL, R2_ENDPOINT, R2_BUCKET, R2_ACCESS_KEY_ID and R2_SECRET_ACCESS_KEY are supported.
 
 ## MCP example
 
@@ -196,7 +196,7 @@ MCP discovery reads all available tool pages and filters them through configured
 - Passwords are stored as PBKDF2-SHA256 password hashes; raw passwords are never stored.
 - Authentication uses an HttpOnly session cookie backed by the persistent database.
 - All application API routes are protected after login.
-- Render deployments require DATABASE_URL when REQUIRE_PERSISTENT_DB=1, preventing accidental fallback to ephemeral SQLite.
+- DATABASE_URL is mandatory; the application has no SQLite fallback.
 
 ## Deployment
 
