@@ -36,20 +36,23 @@ function App(){
 
  async function logout(){try{if(token)await fetch(API+"/api/v1/auth/logout",{method:"POST",headers:{Authorization:"Bearer "+token}})}catch(e){}localStorage.removeItem("personal_ai_token");setUser(null);setChats(initial);setActive("new");}
  async function authSubmit(){
- if(authLoading)return;
- const email=auth.email.trim(),password=auth.password;
- if(!email||!password){notify("Email and password are required");return}
- setAuthLoading(true);
- try{
-  const path=authMode==="login"?"/api/v1/auth/login":"/api/v1/auth/register";
-  const body=authMode==="login"?{email:auth.email.trim(),password:auth.password}:auth;
-  const r=await fetch(API+path,{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify(body)});
-  const d=await r.json().catch(()=>({}));
-  if(!r.ok){notify(d.detail||"Authentication failed");return}
-  if(!d.token||!d.user){notify("Authentication failed: invalid server response");return}
-  localStorage.setItem("personal_ai_token",d.token);setUser(d.user);
- }catch{notify("Authentication failed")}
-}
+  if(authLoading)return;
+  const email=auth.email.trim(),password=auth.password;
+  if(!email||!password){notify("Email and password are required");return}
+  setAuthLoading(true);
+  try{
+   const path=authMode==="login"?"/api/v1/auth/login":"/api/v1/auth/register";
+   const body=authMode==="login"?{email,password}:auth;
+   const r=await fetch(API+path,{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify(body)});
+   const d=await r.json().catch(()=>({}));
+   if(!r.ok){notify(d.detail||"Authentication failed");return}
+   if(!d.token||!d.user){notify("Authentication failed: invalid server response");return}
+   localStorage.setItem("personal_ai_token",d.token);
+   setUser(d.user);
+   setAuth({email:"",password:"",name:""});
+  }catch{notify("Could not reach the server. Please try again.")}
+  finally{setAuthLoading(false)}
+ }
  function copyMessage(content,index){try{navigator.clipboard.writeText(content);setCopiedMessage(index);setTimeout(()=>setCopiedMessage(null),1500)}catch(e){}}
  async function renameChat(id,currentTitle){setRenameState({id,value:currentTitle});}
  async function submitRename(){
