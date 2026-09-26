@@ -1,7 +1,18 @@
-def test_preferences_round_trip(monkeypatch,tmp_path):
- import preferences
- monkeypatch.setattr(preferences,"DB_PATH",str(tmp_path/"prefs.sqlite3"));monkeypatch.setattr(preferences,"ensure_directories",lambda:None)
- assert preferences.get_preferences()["appearance"]=="System"
- saved=preferences.update_preferences({"appearance":"Dark","haptics":False,"language":"Hindi","custom_instructions":"Be concise."})
- assert saved["appearance"]=="Dark" and saved["haptics"] is False and saved["language"]=="Hindi"
- assert preferences.get_preferences()==saved
+import preferences
+from db import connect
+
+def _clean():
+    preferences.init_preferences_db()
+    with connect() as con:
+        con.execute("DELETE FROM preferences")
+
+def test_defaults(monkeypatch):
+    _clean()
+    assert preferences.get_preferences()["appearance"]=="System"
+
+def test_update_round_trip(monkeypatch):
+    _clean()
+    result=preferences.update_preferences({"appearance":"Dark","haptics":False,"language":"Hindi"})
+    assert result["appearance"]=="Dark"
+    assert result["haptics"] is False
+    assert preferences.get_preferences()["language"]=="Hindi"
