@@ -73,7 +73,12 @@ function App(){
   const r=await fetch(API+"/api/v1/chats/"+encodeURIComponent(id),{method:"PATCH",headers:{"Content-Type":"application/json",Authorization:"Bearer "+token},body:JSON.stringify({title})});
   if(r.ok){setChats(cs=>cs.map(c=>c.id===id?{...c,title}:c));setRenameState(null)}else notify("Rename failed");
  }
- function deleteChatById(id){setConfirmState({type:"chat",id,message:"Delete this conversation?"});}
+ function deleteChatById(id){setConfirmState({type:"chat",id,message:"Delete this conversation?"});}\n async function clearAllChats(){
+  const r=await fetch(API+"/api/v1/chats",{method:"DELETE",headers:{Authorization:"Bearer "+token}});
+  if(!r.ok){notify("Could not clear chat history");return false}
+  const fresh=[{id:"new",title:"New conversation",messages:[]}];
+  setChats(fresh);setActive("new");notify("Chat history cleared","success");return true;
+ }
  async function confirmDeleteChat(id){
   const r=await fetch(API+"/api/v1/chats/"+encodeURIComponent(id),{method:"DELETE",headers:{Authorization:"Bearer "+token}});
   if(!r.ok){notify("Delete failed");return}
@@ -95,7 +100,7 @@ function App(){
   </main>
   <FilesModal open={filesOpen} onClose={()=>setFilesOpen(false)} files={files} fileQuery={fileQuery} setFileQuery={setFileQuery} downloadFile={downloadFile} deleteFile={deleteFile}/>
   <MemoryModal open={memoryOpen} onClose={()=>setMemoryOpen(false)} memories={memories} memoryForm={memoryForm} setMemoryForm={setMemoryForm} saveMemory={saveMemory} deleteMemory={deleteMemory}/>
-  <SettingsModal open={settings} onClose={()=>setSettings(false)} onSignOut={logout} onMemory={()=>{setSettings(false);setMemoryOpen(true);loadMemories()}} user={user} connectorForm={connectorForm} setConnectorForm={setConnectorForm} connectorLoading={connectorLoading} connectorTesting={connectorTesting} addConnector={addConnector} testConnector={testConnector} connectors={connectors} deleteConnectorById={deleteConnectorById} settings={settings} settingsLoading={settingsLoading} updateSettings={updateSettings}/>
+  <SettingsModal onClearChats={clearAllChats} open={settings} onClose={()=>setSettings(false)} onSignOut={logout} onMemory={()=>{setSettings(false);setMemoryOpen(true);loadMemories()}} user={user} connectorForm={connectorForm} setConnectorForm={setConnectorForm} connectorLoading={connectorLoading} connectorTesting={connectorTesting} addConnector={addConnector} testConnector={testConnector} connectors={connectors} deleteConnectorById={deleteConnectorById} settings={settings} settingsLoading={settingsLoading} updateSettings={updateSettings}/>
 
  </div>
 }
