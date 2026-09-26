@@ -105,7 +105,9 @@ app.add_middleware(SecurityHeadersMiddleware)
 class ChatRequest(BaseModel):
     message: str = Field(..., min_length=1, max_length=20000)
     session_id: str = Field(default="default", min_length=1, max_length=200)
-    attachment_paths: list[str] = Field(default_factory=list, max_length=3)
+    attachment_paths: list[str] = Field(default_factory=list, max_length=6)
+    web_search: bool = True
+    memory: bool = True
 
 
 class ChatResponse(BaseModel):
@@ -223,6 +225,21 @@ def add_mcp_connector(request: MCPConnectorRequest, user=Depends(current_user)):
     return {"connector": connector}
 
 
+@app.post("/api/v1/mcp/connectors/{connector_id}/test")
+def test_mcp_connector(connector_id: int, user=Depends(current_user)):
+    connector = next((x for x in list_connectors(user["id"]) if x["id"] == connector_id), None)
+    if not connector:
+        raise HTTPException(status_code=404, detail="Connector not found.")
+    try:
+        from mcp_client import discover_tool_schemas
+        schemas = discover_tool_schemas(user["id"])
+        prefix = "mcp__" + connector["name"].replace(" ", "_") + "__"
+        matching = [s for s in schemas if str(s.get("function", {}).get("name", "")).startswith(prefix)]
+        return {"ok": True, "tools": len(matching)}
+    except Exception as exc:
+        raise HTTPException(status_code=502, detail="MCP connector test failed.") from exc
+
+
 @app.delete("/api/v1/mcp/connectors/{connector_id}")
 def remove_mcp_connector(connector_id: int, user=Depends(current_user)):
     if not delete_connector(user["id"], connector_id):
@@ -263,6 +280,8 @@ def chat(request: ChatRequest, user=Depends(current_user)):
             user_id=user["id"],
             image_urls=attachment_urls,
             rag_sources=rag_sources or None,
+            memory_enabled=request.memory,
+            web_search_enabled=request.web_search,
             verbose=False,
         )
     except HTTPException:
@@ -315,6 +334,8 @@ def chat_stream(request: ChatRequest, raw_request: Request, user=Depends(current
                 user_id=user["id"],
                 image_urls=attachment_urls,
                 rag_sources=rag_sources or None,
+                memory_enabled=request.memory,
+                web_search_enabled=request.web_search,
             ):
                 yield "event: delta\ndata: " + json.dumps({"text": chunk}, ensure_ascii=False) + "\n\n"
             yield "event: done\ndata: {}\n\n"
