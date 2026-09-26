@@ -65,5 +65,28 @@ export default function useMCP({API,token,notify}){
   }catch{notify("Connector delete failed")}
  }
 
- return {connectors,connectorForm,setConnectorForm,connectorLoading,connectorTesting,loadConnectors,addConnector,testConnector,deleteConnectorById};
+ async function startOAuth(id){
+  try{
+   const r=await fetch(API+"/api/v1/mcp/connectors/"+encodeURIComponent(id)+"/oauth/start",{method:"POST",headers:{Authorization:"Bearer "+token}});
+   const d=await r.json().catch(()=>({}));
+   if(!r.ok){notify(d.detail||"OAuth connection failed");return false}
+   if(!d.authorization_url){notify("OAuth authorization URL was not returned");return false}
+   window.open(d.authorization_url,"_blank","noopener,noreferrer");
+   notify("Complete authorization in the browser…");
+   for(let i=0;i<30;i++){
+    await new Promise(resolve=>setTimeout(resolve,2000));
+    const status=await fetch(API+"/api/v1/mcp/connectors/"+encodeURIComponent(id)+"/oauth/status",{headers:{Authorization:"Bearer "+token}});
+    const sd=await status.json().catch(()=>({}));
+    if(sd.connected){
+     await testConnector(id);
+     notify("MCP OAuth connected","success");
+     return true;
+    }
+   }
+   notify("Authorization is still pending. Test the connector after completing it.");
+   return false;
+  }catch{notify("OAuth connection failed");return false}
+ }
+
+ return {connectors,connectorForm,setConnectorForm,connectorLoading,connectorTesting,loadConnectors,addConnector,testConnector,startOAuth,deleteConnectorById};
 }
