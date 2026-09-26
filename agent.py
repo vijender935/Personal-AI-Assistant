@@ -41,8 +41,22 @@ def build_messages(goal, session_id, user_id=0, rag_sources=None, memory_enabled
     history = load_history(session_id, max_history, user_id=user_id)
     plan = plan_task(goal)
 
+    try:
+        from preferences import get_preferences
+        preferences = get_preferences(user_id)
+    except Exception:
+        preferences = {}
+    system_prompt = SYSTEM_PROMPT
+    custom_instructions = str(preferences.get("custom_instructions", "") or "").strip()
+    response_style = preferences.get("response_style", "Natural")
+    if custom_instructions:
+        system_prompt += "\n\nUser customization (follow when it does not conflict with safety or the current task):\n" + custom_instructions
+    if response_style == "Concise":
+        system_prompt += "\nPrefer concise answers unless the user asks for detail."
+    elif response_style == "Detailed":
+        system_prompt += "\nPrefer thorough, structured answers when useful."
     messages = [
-        {"role": "system", "content": SYSTEM_PROMPT},
+        {"role": "system", "content": system_prompt},
         {"role": "system", "content": plan_prompt(plan)},
     ]
     used_chars = sum(len(str(m["content"])) for m in messages) + len(goal)
