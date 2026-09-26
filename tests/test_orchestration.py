@@ -112,3 +112,47 @@ def test_simple_conversation_gets_no_tool_schemas():
     from agent import _tool_schemas_for
 
     assert _tool_schemas_for(0, "Hi") == []
+
+
+def test_stream_agent_omits_empty_tools_for_simple_messages(monkeypatch):
+    import agent
+    from types import SimpleNamespace
+
+    calls = []
+
+    class Message:
+        tool_calls = None
+        content = "Hi! Kaise ho?"
+
+        def model_dump(self, exclude_none=True):
+            return {"role": "assistant", "content": self.content}
+
+    class Completions:
+        def create(self, **kwargs):
+            calls.append(kwargs)
+            if kwargs.get("stream"):
+                chunk = SimpleNamespace(
+                    choices=[SimpleNamespace(delta=SimpleNamespace(content="Hi!"))]
+                )
+                return iter([chunk])
+            return SimpleNamespace(choices=[SimpleNamespace(message=Message())])
+
+    class FakeGroq:
+        def __init__(self, api_key):
+            self.chat = SimpleNamespace(completions=Completions())
+
+    monkeypatch.setenv("GROQ_API_KEY", "test-key")
+    monkeypatch.setattr(agent, "Groq", FakeGroq)
+    monkeypatch.setattr(agent, "_prepare_goal", lambda *args, **kwargs: None)
+    monkeypatch.setattr(agent, "build_messages", lambda *args, **kwargs: [
+        {"role": "system", "content": "test"},
+        {"role": "user", "content": "Hi"},
+    ])
+    monkeypatch.setattr(agent, "save_turn", lambda *args, **kwargs: None)
+
+    assert "".join(agent.stream_agent("Hi", user_id=1)) == "Hi!"
+    assert len(calls) == 2
+    assert "tools" not in calls[0]
+    assert "tool_choice" not in calls[0]
+    assert "tools" not in calls[1]
+    assert "tool_choice" not in calls[1]
