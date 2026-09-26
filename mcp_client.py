@@ -5,10 +5,13 @@ import asyncio
 import os
 import time
 import contextlib
+import logging
 from typing import Any
 
 from mcp import Client
 from mcp_registry import load_server_configs, tool_allowed
+
+logger = logging.getLogger(__name__)
 
 _DISCOVERY_CACHE: dict[str, Any] = {"key": None, "expires_at": 0.0, "schemas": []}
 
@@ -80,51 +83,92 @@ async def _client_context(config):
         yield client
 
 
+async def _list_all_tools(client) -> list[Any]:
+    """Read every MCP tool page instead of silently truncating at the first page."""
+    tools = []
+    cursor = None
+    for _ in range(100):
+        result = await client.list_tools(cursor=cursor)
+        tools.extend(result.tools or [])
+        cursor = getattr(result, "nextCursor", None) or getattr(result, "next_cursor", None)
+        if not cursor:
+            break
+    return tools
+
+
+def _schemas_for_tools(config, tools) -> list[dict[str, Any]]:
+    schemas = []
+    for tool in tools:
+        if not tool_allowed(config, tool.name):
+            continue
+        schema = getattr(tool, "inputSchema", None) or getattr(tool, "input_schema", None) or {"type": "object", "properties": {}}
+        schemas.append({
+            "type": "function",
+            "function": {
+                "name": f"mcp__{_safe_tool_component(config.name)}__{_safe_tool_component(tool.name)}",
+                "description": getattr(tool, "description", None) or f"MCP tool {tool.name}",
+                "parameters": schema,
+            },
+        })
+    return schemas
+
+
+_LAST_DIAGNOSTICS: dict[int, list[dict[str, str]]] = {}
+
+
 async def _discover_async(user_id: int = 0) -> list[dict[str, Any]]:
     discovered = []
+    diagnostics = []
     for config in load_server_configs(user_id):
         try:
             async with _client_context(config) as client:
-                result = await client.list_tools()
-                for tool in result.tools:
-                    if not tool_allowed(config, tool.name):
-                        continue
-                    schema = getattr(tool, "inputSchema", None) or {"type": "object", "properties": {}}
-                    discovered.append({
-                        "type": "function",
-                        "function": {
-                            "name": f"mcp__{_safe_tool_component(config.name)}__{_safe_tool_component(tool.name)}",
-                            "description": tool.description or f"MCP tool {tool.name}",
-                            "parameters": schema,
-                        },
-                    })
-        except Exception:
-            continue
+                discovered.extend(_schemas_for_tools(config, await _list_all_tools(client)))
+        except Exception as exc:
+            diagnostics.append({"name": config.name, "error": str(exc)[:500]})
+            logger.warning("MCP discovery failed for %s: %s", config.name, exc)
+    _LAST_DIAGNOSTICS[user_id] = diagnostics
     return discovered
 
 
-def discover_connector_tool_schemas(user_id: int, server_name: str) -> list[dict[str, Any]]:
-    """Discover one configured connector and surface its real connection errors."""
+def discover_connector_diagnostics(user_id: int, server_name: str) -> dict[str, Any]:
+    """Connect to one MCP server and return a user-safe diagnostic snapshot."""
     config = next((item for item in load_server_configs(user_id) if item.name == server_name), None)
     if config is None:
         raise ValueError(f"MCP server {server_name!r} is not configured.")
+
     async def discover_one():
         async with _client_context(config) as client:
-            result = await client.list_tools()
-            schemas=[]
-            for tool in result.tools:
-                if not tool_allowed(config, tool.name):
-                    continue
-                schema = getattr(tool, "inputSchema", None) or {"type":"object","properties":{}}
-                schemas.append({
-                    "type":"function",
-                    "function":{
-                        "name":f"mcp__{_safe_tool_component(config.name)}__{_safe_tool_component(tool.name)}",
-                        "description":tool.description or f"MCP tool {tool.name}",
-                        "parameters":schema,
-                    },
-                })
-            return schemas
+            schemas = _schemas_for_tools(config, await _list_all_tools(client))
+            return {
+                "connected": True,
+                "tools": len(schemas),
+                "tool_names": [item["function"]["name"] for item in schemas],
+                "server": getattr(getattr(client, "server_info", None), "name", None),
+                "protocol_version": getattr(client, "protocol_version", None),
+            }
+
+    try:
+        result = asyncio.run(asyncio.wait_for(discover_one(), timeout=_timeout_seconds()))
+        _LAST_DIAGNOSTICS[user_id] = [x for x in _LAST_DIAGNOSTICS.get(user_id, []) if x.get("name") != server_name]
+        return result
+    except Exception as exc:
+        detail = str(exc).strip() or exc.__class__.__name__
+        _LAST_DIAGNOSTICS[user_id] = [x for x in _LAST_DIAGNOSTICS.get(user_id, []) if x.get("name") != server_name] + [{"name": server_name, "error": detail[:500]}]
+        return {"connected": False, "tools": 0, "tool_names": [], "error": detail[:500]}
+
+
+def discover_connector_tool_schemas(user_id: int, server_name: str) -> list[dict[str, Any]]:
+    diagnostic = discover_connector_diagnostics(user_id, server_name)
+    if not diagnostic.get("connected"):
+        raise RuntimeError(diagnostic.get("error") or "MCP connection failed.")
+    config = next((item for item in load_server_configs(user_id) if item.name == server_name), None)
+    if config is None:
+        raise ValueError(f"MCP server {server_name!r} is not configured.")
+
+    async def discover_one():
+        async with _client_context(config) as client:
+            return _schemas_for_tools(config, await _list_all_tools(client))
+
     return asyncio.run(asyncio.wait_for(discover_one(), timeout=_timeout_seconds()))
 
 
