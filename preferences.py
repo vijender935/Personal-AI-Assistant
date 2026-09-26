@@ -9,6 +9,9 @@ DEFAULTS={"appearance":"System","haptics":True,"language":"English","web_search"
 def init_preferences_db():
     ensure_directories()
     with connect(DB_PATH) as con:
+        # Remove the legacy account-scoped preferences table.
+        try: con.execute("DROP TABLE IF EXISTS user_preferences")
+        except Exception: pass
         con.execute("""CREATE TABLE IF NOT EXISTS preferences(
             id INTEGER PRIMARY KEY CHECK(id=1), preferences TEXT NOT NULL DEFAULT '{}')""")
 
