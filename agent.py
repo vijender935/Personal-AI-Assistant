@@ -31,19 +31,19 @@ def _extract_memory_candidate(text):
             return text.strip()[len(prefix):].strip()
     return None
 
-def build_messages(goal, session_id, user_id=0, rag_sources=None, memory_enabled=True):
+def build_messages(goal, session_id, rag_sources=None, memory_enabled=True):
     # Groq's on-demand tier currently enforces a relatively small TPM/request
     # budget. Long conversations can otherwise grow past the limit and produce
     # intermittent 413/token rate-limit failures. Keep the prompt bounded while
     # preserving the newest turns.
     max_context_chars = max(8000, int(os.getenv("MAX_CONTEXT_CHARS", "24000")))
     max_history = min(MAX_HISTORY_MESSAGES, max(4, int(os.getenv("MAX_CONTEXT_HISTORY", "12"))))
-    history = load_history(session_id, max_history, user_id=user_id)
+    history = load_history(session_id, max_history)
     plan = plan_task(goal)
 
     try:
         from preferences import get_preferences
-        preferences = get_preferences(user_id)
+        preferences = get_preferences()
     except Exception:
         preferences = {}
     system_prompt = SYSTEM_PROMPT
@@ -63,7 +63,7 @@ def build_messages(goal, session_id, user_id=0, rag_sources=None, memory_enabled
 
     # Avoid vector/RAG lookups for ordinary conversation; they add latency and
     # are only useful when the request actually asks for memory/document context.
-    memories = semantic_recall_memories(goal, limit=8, user_id=user_id) if (memory_enabled and plan.needs_memory) else []
+    memories = semantic_recall_memories(goal, limit=8) if (memory_enabled and plan.needs_memory) else []
     if memories and used_chars < max_context_chars:
         memory_text = "Relevant saved memories (semantic retrieval):\n" + "\n".join(
             f"- {m}" for m in memories
@@ -76,7 +76,7 @@ def build_messages(goal, session_id, user_id=0, rag_sources=None, memory_enabled
 
     try:
         from memory import search_rag
-        rag_results = search_rag(goal, limit=4, user_id=user_id, sources=rag_sources) if (rag_sources or plan.needs_rag) else []
+        rag_results = search_rag(goal, limit=4, sources=rag_sources) if (rag_sources or plan.needs_rag) else []
     except Exception:
         rag_results = []
     if rag_results and used_chars < max_context_chars:
@@ -115,7 +115,7 @@ def build_messages(goal, session_id, user_id=0, rag_sources=None, memory_enabled
     messages.append({"role": "user", "content": goal})
     return messages
 
-def _tool_schemas_for(user_id, goal, web_search_enabled=True):
+def _tool_schemas_for(goal, web_search_enabled=True):
     """Return only tools appropriate for the classified request.
 
     Simple conversational messages intentionally receive no tool schemas. This
@@ -142,7 +142,7 @@ def _tool_schemas_for(user_id, goal, web_search_enabled=True):
     if plan.needs_mcp:
         try:
             from mcp_client import discover_tool_schemas
-            schemas.extend(select_mcp_tools(discover_tool_schemas(user_id), goal, max_tools=12))
+            schemas.extend(select_mcp_tools(discover_tool_schemas(), goal, max_tools=12))
         except Exception as exc:
             logger.warning("MCP discovery unavailable: %s", exc)
 
@@ -153,30 +153,30 @@ def _tool_schemas_for(user_id, goal, web_search_enabled=True):
             unique[name] = schema
     return list(unique.values())
 
-def _execute_tool(name, args, user_id):
+def _execute_tool(name, args):
     try:
         fn = TOOL_FUNCTIONS.get(name)
         if fn:
-            return fn(**args, user_id=user_id)
+            return fn(**args)
         if name.startswith("mcp__"):
             from mcp_client import call_tool
-            return call_tool(name, args, user_id=user_id)
+            return call_tool(name, args)
         return f"Unknown tool: {name}"
     except Exception as exc:
         logger.exception("Tool failed: %s", name)
         return f"Tool error in {name}: {exc}"
 
-def _prepare_goal(goal, user_id):
+def _prepare_goal(goal):
     explicit_memory = _extract_memory_candidate(goal)
     if explicit_memory:
-        remember_fact(explicit_memory, source="user-explicit", user_id=user_id)
+        remember_fact(explicit_memory, source="user-explicit")
         try:
             from memory import remember_semantic
-            remember_semantic(explicit_memory, source="user-explicit", user_id=user_id)
+            remember_semantic(explicit_memory, source="user-explicit")
         except Exception as exc:
             logger.warning("Semantic memory unavailable: %s", exc)
 
-def run_agent(goal, session_id="default", user_id=0, image_urls=None, rag_sources=None, verbose=True, memory_enabled=True, web_search_enabled=True):
+def run_agent(goal, session_id="default", image_urls=None, rag_sources=None, verbose=True, memory_enabled=True, web_search_enabled=True):
     goal = goal.strip()
     if not goal:
         return "Please enter a message."
@@ -184,12 +184,12 @@ def run_agent(goal, session_id="default", user_id=0, image_urls=None, rag_source
     if not api_key:
         return "❌ GROQ_API_KEY set nahi hai. README.md dekho setup ke liye."
 
-    _prepare_goal(goal, user_id)
+    _prepare_goal(goal)
     task_plan = plan_task(goal)
     execution_plan = build_execution_plan(task_plan)
     client = Groq(api_key=api_key)
-    messages = build_messages(goal, session_id, user_id=user_id, rag_sources=rag_sources, memory_enabled=memory_enabled)
-    tool_schemas = _tool_schemas_for(user_id, goal, web_search_enabled=web_search_enabled)
+    messages = build_messages(goal, session_id, rag_sources=rag_sources, memory_enabled=memory_enabled)
+    tool_schemas = _tool_schemas_for(goal, web_search_enabled=web_search_enabled)
 
     if image_urls:
         messages[-1]["content"] = [{"type": "text", "text": goal}] + [
@@ -221,7 +221,7 @@ def run_agent(goal, session_id="default", user_id=0, image_urls=None, rag_source
         messages.append(msg.model_dump(exclude_none=True))
         if not msg.tool_calls:
             answer = msg.content or ""
-            save_turn(session_id, goal, answer, user_id=user_id)
+            save_turn(session_id, goal, answer)
             return answer
 
         for call in msg.tool_calls:
@@ -235,7 +235,7 @@ def run_agent(goal, session_id="default", user_id=0, image_urls=None, rag_source
             if verbose:
                 logger.info("Tool call: %s(%s)", name, args)
 
-            result = _execute_tool(name, args, user_id)
+            result = _execute_tool(name, args)
             validated = validate_tool_result(result)
             messages.append({
                 "role": "tool",
@@ -256,7 +256,7 @@ def run_agent(goal, session_id="default", user_id=0, image_urls=None, rag_source
         return "⚠️ Tool execution repeatedly failed. Maine unsafe/infinite retry se bachne ke liye execution stop kar diya."
     return f"⚠️ Max tool iterations ({MAX_ITERATIONS}) reached — task incomplete reh gaya."
 
-def stream_agent(goal, session_id="default", user_id=0, image_urls=None, rag_sources=None, memory_enabled=True, web_search_enabled=True):
+def stream_agent(goal, session_id="default", image_urls=None, rag_sources=None, memory_enabled=True, web_search_enabled=True):
     """Execute tools first when required, then stream the final assistant response.
 
     This keeps the frontend streaming endpoint compatible with calculator/web/file/MCP
@@ -271,12 +271,12 @@ def stream_agent(goal, session_id="default", user_id=0, image_urls=None, rag_sou
         yield "❌ GROQ_API_KEY set nahi hai."
         return
 
-    _prepare_goal(goal, user_id)
+    _prepare_goal(goal)
     task_plan = plan_task(goal)
     execution_plan = build_execution_plan(task_plan)
     client = Groq(api_key=api_key)
-    messages = build_messages(goal, session_id, user_id=user_id, rag_sources=rag_sources, memory_enabled=memory_enabled)
-    tool_schemas = _tool_schemas_for(user_id, goal, web_search_enabled=web_search_enabled)
+    messages = build_messages(goal, session_id, rag_sources=rag_sources, memory_enabled=memory_enabled)
+    tool_schemas = _tool_schemas_for(goal, web_search_enabled=web_search_enabled)
 
     if image_urls:
         messages[-1]["content"] = [{"type": "text", "text": goal}] + [
@@ -307,7 +307,7 @@ def stream_agent(goal, session_id="default", user_id=0, image_urls=None, rag_sou
                         yield delta
                 answer = "".join(parts)
                 if answer:
-                    save_turn(session_id, goal, answer, user_id=user_id)
+                    save_turn(session_id, goal, answer)
                 return
             except Exception as exc:
                 logger.warning(
@@ -362,7 +362,7 @@ def stream_agent(goal, session_id="default", user_id=0, image_urls=None, rag_sou
                 args = json.loads(call.function.arguments or "{}")
             except json.JSONDecodeError:
                 args = {}
-            result = _execute_tool(name, args, user_id)
+            result = _execute_tool(name, args)
             validated = validate_tool_result(result)
             messages.append({
                 "role": "tool",
@@ -405,7 +405,7 @@ def stream_agent(goal, session_id="default", user_id=0, image_urls=None, rag_sou
                     yield delta
             answer = "".join(parts)
             if answer:
-                save_turn(session_id, goal, answer, user_id=user_id)
+                save_turn(session_id, goal, answer)
             return
         except Exception as exc:
             logger.warning(
@@ -442,14 +442,14 @@ def interactive():
             print(f"🆕 New session: {session_id}\n")
             continue
         if command == "/memories":
-            print("\n".join(f"- {m}" for m in semantic_recall_memories("", limit=50, user_id=0)) or "(no memories)")
+            print("\n".join(f"- {m}" for m in semantic_recall_memories("", limit=50)) or "(no memories)")
             print()
             continue
         if command.startswith("/remember "):
-            remember_fact(goal[len("/remember "):].strip(), source="user-command", user_id=0)
+            remember_fact(goal[len("/remember "):].strip(), source="user-command")
             print("🧠 Memory saved.\n")
             continue
-        print("\nAgent:", run_agent(goal, session_id=session_id, user_id=0), "\n")
+        print("\nAgent:", run_agent(goal, session_id=session_id), "\n")
 
 if __name__ == "__main__":
     init_db()

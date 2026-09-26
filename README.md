@@ -1,496 +1,207 @@
 # Personal AI Assistant
 
-A local conversational personal AI assistant powered by Groq, with persistent SQLite memory, tool calling, web search, sandboxed file tools, and a lightweight Gradio UI.
+A single-user personal AI assistant built with Python, FastAPI, React/Vite, Groq, persistent chat history, semantic memory, RAG, local file tools, multimodal attachments, and MCP connectors.
 
-## Phase 6 — Production foundation
+This repository is intentionally designed for one personal instance, not as a multi-user SaaS application. There is no account system, login/registration flow, per-user ID, or per-user database partitioning.
 
-The original prototype has now been hardened without changing its core purpose.
+## Features
 
-### Security improvements
+### Conversational agent
+- Groq-powered chat with configurable model and vision model.
+- Bounded conversation context.
+- Retry handling for transient model failures.
+- Tool-aware agent loop with execution limits and recovery.
+- Streaming responses through Server-Sent Events.
+- Regenerate the latest answer.
+- Edit and resend a user message.
+- Multiple local chat sessions with titles, rename, delete, and clear-history controls.
 
-- File reads/writes are restricted to AGENT_FILE_ROOT.
-- Calculator no longer uses eval().
-- Shell access remains disabled by default.
-- Enabled shell commands use an allowlist.
-- Shell commands run with shell=False.
-- Shell execution has a configurable timeout.
-- Runtime configuration is centralized in config.py.
-- Runtime data is ignored by Git.
-- Automated tests cover security-critical tools.
+### Memory and RAG
+- Persistent explicit memories.
+- Semantic memory retrieval with FastEmbed.
+- Keyword fallback retrieval.
+- Save, list, search, and delete memories.
+- Custom instructions and response-style preferences.
+- Document chunking and semantic retrieval.
+- Source-scoped RAG for attachments.
+- PDF, DOCX, TXT, Markdown, CSV, JSON, XML and common image parsing.
+- OCR fallback for scanned PDFs and images.
+- Re-indexing a source replaces its previous chunks.
+- RAG source status reporting.
 
-## Project structure
+### Files and multimodal input
+- Upload, list, download and delete files.
+- 10 MB upload limit.
+- Path traversal protection.
+- Optional Cloudflare R2 persistence.
+- Image attachments sent to the configured vision model.
+- Automatic document indexing after upload.
 
-Personal-AI-Assistant/
-- agent.py — agent loop, memory context, model calls
-- tools.py — tools and SQLite memory
-- config.py — environment-based configuration
-- app.py — local Gradio UI
-- tests/test_tools.py — security-focused tests
-- requirements.txt
-- .gitignore
-- README.md
+### Built-in tools
+- Safe arithmetic calculator without eval().
+- Web search through DDGS.
+- Sandboxed text-file read/write.
+- Optional allowlisted shell execution.
+- shell=False, timeout and working-directory restrictions.
 
-## Setup
+### MCP ecosystem
+- Environment-defined MCP servers.
+- Persistent MCP connectors for this single assistant instance.
+- Streamable HTTP and SSE transports.
+- Private/local target protection for HTTP connectors.
+- Backend-only authentication headers.
+- Paginated MCP tool discovery.
+- Tool-schema generation and relevance filtering.
+- Per-connector tool allowlists.
+- Discovery caching and bounded timeouts.
+- Connector diagnostics.
+- OAuth support for Streamable HTTP connectors.
+- OAuth tokens and client details persisted without user identifiers.
 
-Create an environment and install dependencies:
+### Preferences
+- System / Light / Dark appearance.
+- Language and haptics preferences.
+- Web-search and memory toggles.
+- Custom instructions.
+- Natural / Concise / Detailed response style.
+- Persistent update and reset logic.
 
-    python -m venv .venv
-    source .venv/bin/activate
-    pip install -r requirements.txt
-
-Termux:
-
-    pip install -r requirements.txt --break-system-packages
-
-Set the Groq key:
-
-    export GROQ_API_KEY="your-key"
-
-Terminal chat:
-
-    python agent.py
-
-Web UI:
-
-    python app.py
-
-Tests:
-
-    pytest -q
-
-## Configuration
-
-Default model:
-
-    openai/gpt-oss-120b
-
-Useful environment variables:
-
-    GROQ_MODEL
-    MAX_ITERATIONS
-    MAX_RETRIES
-    MAX_HISTORY_MESSAGES
-    MAX_FILE_CHARS
-    AGENT_DATA_DIR
-    AGENT_FILE_ROOT
-    AGENT_DB
-    ALLOW_SHELL
-    ALLOWED_SHELL_COMMANDS
-    SHELL_TIMEOUT
-
-Default runtime data is stored under:
-
-    data/
-      agent_memory.db
-      files/
-
-The data directory is intentionally excluded from Git.
-
-## File tools
-
-The AI can read and write text files only inside AGENT_FILE_ROOT.
-
-Example tool paths:
-
-    notes/todo.txt
-    projects/example.py
-
-Attempts to escape the configured root using ../ or an external absolute path are rejected.
-
-## Optional shell access
-
-Shell execution is OFF by default.
-
-To explicitly enable it:
-
-    export ALLOW_SHELL=1
-
-Then configure an allowlist if needed:
-
-    export ALLOWED_SHELL_COMMANDS="python,python3,pip,git,pwd,ls,cat,echo"
-
-Commands are executed without shell=True and from the configured file root.
-
-Do not enable shell access in an untrusted environment.
-
-## Memory commands
-
-    /remember Mera naam Vijender hai
-    /memories
-    /new
-    /exit
-
-The assistant also recognizes explicit phrases such as Remember that ... and Yaad rakho ....
+### Frontend
+- React/Vite responsive conversational UI.
+- Conversation sidebar and search.
+- New chat, rename, delete and clear-history controls.
+- Streaming responses.
+- Regenerate and edit/resend.
+- Camera, photo and file attachment menu.
+- File manager with search/download/delete.
+- Memory manager.
+- Settings for appearance, AI behavior, customization, connectors, privacy and data controls.
+- Mobile-responsive layout.
+- No login or registration screen.
 
 ## Architecture
 
-User
+~~~
+React / Vite
+     |
+     | HTTP + SSE
+     v
+FastAPI
+     |
+     v
+Agent runtime
+  |      |       |
+  |      |       +--> Groq / vision model
+  |      |
+  |      +----------> Memory + RAG
   |
-  +--> Terminal / Gradio UI
-          |
-          +--> Agent Engine
-                  |
-                  +--> Conversation history
-                  +--> Long-term memory
-                  +--> Groq LLM
-                  +--> Tool loop
-                          +--> Calculator
-                          +--> Web Search
-                          +--> Sandboxed File Tools
-                          +--> Optional Allowlisted Shell
-
-## Phase 7
-
-Next, the agent engine will be exposed through a proper FastAPI REST API so a future React/Next.js frontend can communicate with it cleanly.
-
-
-## Phase 7 — FastAPI REST API
-
-The agent engine is now exposed through a REST API. This separates the AI backend from the future web/mobile frontend.
-
-### Run the API
-
-Install dependencies:
-
-    pip install -r requirements.txt
-
-Start the development server:
-
-    uvicorn api:app --reload
-
-The API will be available at:
-
-    http://127.0.0.1:8000
-
-FastAPI interactive documentation:
-
-    http://127.0.0.1:8000/docs
-
-OpenAPI schema:
-
-    http://127.0.0.1:8000/openapi.json
-
-### API endpoints
-
-#### Health
-
-    GET /health
-
-Returns service status, model name, and whether shell access is enabled.
-
-#### Chat
-
-    POST /api/v1/chat
-
-Request:
-
-    {
-      "message": "Hello",
-      "session_id": "default"
-    }
-
-Response:
-
-    {
-      "answer": "...",
-      "session_id": "default",
-      "model": "openai/gpt-oss-120b"
-    }
-
-The API keeps the session identifier and passes it to the existing SQLite conversation-memory layer.
-
-#### Memories
-
-Create a memory:
-
-    POST /api/v1/memories
-
-    {
-      "fact": "Mera naam Vijender hai",
-      "source": "api"
-    }
-
-List memories:
-
-    GET /api/v1/memories
-
-Search memories:
-
-    GET /api/v1/memories/search?q=Vijender
-
-### CORS
-
-Allowed frontend origins are configured through CORS_ORIGINS.
-
-Example:
-
-    export CORS_ORIGINS="http://localhost:3000,http://localhost:5173"
-
-This prepares the backend for a future React/Next.js frontend.
-
-### API architecture
-
-    React / Next.js / Mobile
-              |
-              | HTTP + JSON
-              v
-         FastAPI API
-              |
-              v
-         Agent Engine
-          /    |    \
-       Memory LLM  Tools
-              |
-              v
-        SQLite / external services
-
-### Run tests
-
-    pytest -q
-
-Phase 7 adds API-level tests for health, service info, memory operations, and missing API-key handling.
-
-
-## Phase 8 — Semantic Memory + RAG
-
-Phase 8 upgrades keyword-only memory to local semantic retrieval and adds a lightweight document RAG layer.
-
-### Semantic memory
-
-Explicitly saved memories are embedded with:
-
-    sentence-transformers/all-MiniLM-L6-v2
-
-Embeddings are stored in SQLite. New messages retrieve semantically similar memories using cosine similarity rather than only matching words.
-
-### Local RAG
-
-Text documents can be chunked, embedded, stored in SQLite, and retrieved by semantic similarity.
-
-Index a text document directly:
-
-    POST /api/v1/rag/documents
-
-Example body:
-
-    {
-      "source": "notes/knowledge.txt",
-      "content": "Your knowledge-base text..."
-    }
-
-Index a file inside AGENT_FILE_ROOT:
-
-    POST /api/v1/rag/files?path=notes/knowledge.txt
-
-Search the knowledge base:
-
-    GET /api/v1/rag/search?q=your%20question
-
-When relevant RAG chunks exist, the agent adds them to the model context before generating its answer.
-
-### Phase 8 architecture
-
-    User message
-         |
-         v
-       Agent
-      /  |  \
-     /   |   \
- History Memory RAG
-   |      |     |
- SQLite  SQLite SQLite
-          \     /
-           \   /
-        Relevant context
-              |
-              v
-           Groq LLM
-
-### Install
-
-Phase 8 adds:
-
-    sentence-transformers
-    numpy
-
-Run:
-
-    pip install -r requirements.txt
-    pytest -q
-
-The embedding model is loaded lazily. The first semantic-memory or RAG operation may download the model and take longer than later requests.
-
-The first implementation intentionally uses SQLite instead of requiring a separate vector database, keeping the local RAG stack simple and free for personal-scale datasets.
-
-
-## Phase 9 — Agentic Tools + MCP
-
-Phase 9 adds a standard Model Context Protocol (MCP) server around the assistant's tool layer.
-
-### MCP server
-
-File:
-
-    mcp_server.py
-
-The MCP server exposes:
-
-    calculate
-    search_web
-    read_text_file
-    write_text_file
-    execute_command
-    add_knowledge
-    add_knowledge_file
-    search_knowledge
-
-This makes the assistant's capabilities consumable by MCP-compatible hosts and agents instead of being hard-wired to one UI.
-
-### Run MCP locally
-
-Install dependencies:
-
-    pip install -r requirements.txt
-
-For stdio:
-
-    python mcp_server.py
-
-For Streamable HTTP:
-
-    mcp run mcp_server.py --transport streamable-http
-
-### Phase 9 architecture
-
-    Chat / Future UI
-             |
-             v
-        Agent Engine
-          /       \
-         /         \
-    Groq LLM    MCP Tool Layer
-                    |
-          +---------+---------+
-          |         |         |
-        Web/File  Shell      RAG
-                  optional
-
-The MCP server is separated from the model provider, so the same tools can later be consumed by another model, agent, IDE, MCP host, or custom frontend.
-
-### Security
-
-Phase 6 security controls remain active:
-
-- File operations stay inside AGENT_FILE_ROOT.
-- Shell remains disabled by default.
-- Shell commands remain allowlisted.
-- Shell uses shell=False and a timeout.
-- RAG file indexing uses the same file sandbox.
-
-The MCP layer does not bypass these controls.
-
-
-## Phase 10 — Professional Frontend
-
-A dedicated React/Vite frontend has been added under `frontend/`.
-
-### UI features
-
-- ChatGPT-style conversational layout
-- Responsive sidebar
-- New chat
-- Conversation list
-- Chat search UI
-- Model indicator
-- Message composer
-- Enter-to-send / Shift+Enter
-- Loading indicator
-- Suggested prompts
-- Settings modal
-- Profile entry point
-- Mobile-responsive layout
-- Direct connection to the Phase 7 FastAPI chat endpoint
-
-### Run the frontend
-
-From the repository root:
-
-    cd frontend
-    npm install
-    npm run dev
-
-The Vite development server normally runs on:
-
-    http://localhost:5173
-
-Make sure the FastAPI backend is also running:
-
-    uvicorn api:app --reload
-
-The frontend calls:
-
-    POST http://127.0.0.1:8000/api/v1/chat
-
-For a deployed backend, change the API base URL in `frontend/src/main.jsx`.
-
-### Frontend architecture
-
-    React/Vite
-        |
-        | HTTP + JSON
-        v
-    FastAPI
-        |
-        v
-    Agent Engine
-      / | \
-     RAG Memory Tools
-        |
-        v
-      Groq LLM
-
-Phase 10 is intentionally frontend-first. Authentication, persistent user accounts, file uploads, streaming responses, and richer profile/settings are expanded in the following phases.
-
-
-## Phase 12 — Files + Multimodal Foundation
-
-Phase 12 adds an authenticated file-upload layer and frontend attachment control.
-
-### File API
-
-    POST /api/v1/files/upload
-    GET  /api/v1/files/{path}
-
-Uploads are restricted to 10 MB and stored inside the configured file sandbox. Path traversal is rejected.
-
-Supported local file handling includes text/JSON/XML preview and binary-file metadata/base64 access.
-
-### Frontend
-
-The chat composer now includes an attachment button. Selected files are uploaded through the authenticated FastAPI endpoint and the uploaded filename is added to the current composer context.
-
-This phase establishes the file pipeline. Rich vision-model prompting, PDF extraction, OCR, document previews, and image-aware chat are the next multimodal refinements.
-
-
-## Phase 13 — MCP Ecosystem
-
-Phase 13 adds an external MCP server registry layer.
-
-Configure external servers through the MCP_SERVERS environment variable as JSON.
-
-Example:
-
-    export MCP_SERVERS='{"local":{"transport":"stdio","command":"python","args":["server.py"]},"remote":{"transport":"streamable-http","url":"https://example.com/mcp"}}'
-
-The backend exposes the authenticated registry view at:
-
-    GET /api/v1/mcp/servers
-
-The frontend includes an MCP Servers entry that displays configured servers.
-
-The registry is intentionally configuration-only in this phase. It does not blindly execute arbitrary remote commands. This keeps external MCP connectivity opt-in while establishing the architecture for a future MCP client/tool discovery layer.
-
-
-## Phase 15.3 — Document Understanding + RAG
-
-Uploaded PDF, DOCX, TXT, Markdown, CSV, JSON, and XML documents are parsed automatically and indexed into the authenticated user's semantic knowledge base. Image attachments continue to use vision inference. Document attachments use source-scoped semantic retrieval so unrelated user documents are not injected into the answer. Re-uploading a document path replaces its previous chunks.
+  +-----------------> Local tools + MCP
+                         |
+                         +--> configured servers
+                         +--> OAuth
+     |
+     +--> SQLite / PostgreSQL
+     +--> local file root / optional R2
+~~~
+
+## Single-user data model
+
+Persistent state is global to this assistant instance:
+
+- messages(session_id, ...)
+- chat_metadata(session_id, ...)
+- memories(...)
+- semantic_memories(...)
+- rag_documents(...)
+- preferences(id=1, ...)
+- mcp_connectors(...)
+- mcp_oauth_credentials(connector_id, ...)
+
+Legacy user_id columns are removed by initialization/migration paths where applicable. Authentication tables and the old auth.py module are no longer part of the application.
+
+## Project structure
+
+- agent.py — agent runtime, context assembly, retries, tools and streaming.
+- orchestration.py — task classification, execution planning and tool-result validation.
+- tools.py — calculator, web search, file tools, chat history and basic memory.
+- memory.py — semantic memory and RAG.
+- document_parser.py — document extraction and OCR routing.
+- multimodal.py — uploads, local file access and optional R2.
+- api.py — FastAPI REST/SSE API.
+- connectors.py — MCP connector storage and validation.
+- mcp_registry.py — environment and connector MCP registry.
+- mcp_client.py — MCP discovery and execution.
+- mcp_oauth.py — persistent MCP OAuth state and callbacks.
+- preferences.py — single-instance preferences.
+- frontend/ — React/Vite application.
+- tests/ — backend and frontend tests.
+
+## Setup
+
+~~~
+python -m venv .venv
+source .venv/bin/activate
+pip install -r requirements.txt
+export GROQ_API_KEY="your-key"
+~~~
+
+Run the API:
+
+~~~
+uvicorn api:app --reload
+~~~
+
+Run the frontend:
+
+~~~
+cd frontend
+npm install
+npm run dev
+~~~
+
+Run tests:
+
+~~~
+pytest -q
+cd frontend && npm test && npm run build
+~~~
+
+## Important configuration
+
+GROQ_API_KEY, GROQ_MODEL, GROQ_VISION_MODEL, MAX_ITERATIONS, MAX_RETRIES, MAX_HISTORY_MESSAGES, MAX_CONTEXT_HISTORY, MAX_CONTEXT_CHARS, AGENT_DATA_DIR, AGENT_FILE_ROOT, AGENT_DB, ALLOW_SHELL, ALLOWED_SHELL_COMMANDS, SHELL_TIMEOUT, CORS_ORIGINS, MCP_SERVERS, MCP_ALLOWED_SERVERS, MCP_TIMEOUT_SECONDS, MCP_DISCOVERY_TTL_SECONDS, PUBLIC_BASE_URL, R2_ENDPOINT, R2_BUCKET, R2_ACCESS_KEY_ID and R2_SECRET_ACCESS_KEY are supported.
+
+## MCP example
+
+~~~
+export MCP_SERVERS='{
+  "local": {
+    "transport": "stdio",
+    "command": "python",
+    "args": ["server.py"]
+  },
+  "remote": {
+    "transport": "streamable-http",
+    "url": "https://example.com/mcp",
+    "allowed_tools": ["search"]
+  }
+}'
+~~~
+
+MCP discovery reads all available tool pages and filters them through configured allowlists before exposing schemas to the model.
+
+## Deployment
+
+Render configuration is included for the FastAPI backend, React/Vite static frontend and persistent PostgreSQL database. The same single-user data model applies locally and when deployed.
+
+## Security boundaries
+
+- File paths are restricted to the configured file root.
+- Shell execution is disabled by default.
+- Shell commands are allowlisted and executed without a shell.
+- MCP HTTP connectors reject private/local targets by default.
+- Connector credentials and OAuth tokens remain backend-side.
+- MCP tool access is restricted by explicit allowlists.
+- Chat requests have a process-local rate limit.
+- Security response headers are enabled.
+
+This project is intended for a personal deployment where the operator controls the backend, database and connected services.

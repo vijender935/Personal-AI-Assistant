@@ -7,7 +7,9 @@ or:
 """
 from mcp.server import MCPServer
 
-from memory import index_document, index_file, search_rag
+from memory import index_document, search_rag
+from multimodal import ensure_local_file
+from document_parser import extract_and_limit
 from tools import calculator, read_file, web_search, write_file, run_shell
 
 mcp = MCPServer(
@@ -55,7 +57,7 @@ def add_knowledge(source: str, content: str) -> str:
 @mcp.tool()
 def add_knowledge_file(path: str) -> str:
     """Index a text file from the configured file sandbox into the RAG knowledge base."""
-    return f"Indexed {index_file(path)} chunks from {path}."
+    candidate = ensure_local_file(path)\n    return f"Indexed {index_document(path, extract_and_limit(candidate), replace_source=True)} chunks from {path}."
 
 
 @mcp.tool()
