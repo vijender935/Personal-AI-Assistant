@@ -224,7 +224,7 @@ async def complete_oauth(
     return {"connected": True, "connector_id": flow.connector_id}
 
 
-def oauth_status(user_id: int, connector_id: int) -> dict[str, Any]:
+def oauth_token_present(user_id: int, connector_id: int) -> bool:\n    _connector(user_id, connector_id)\n    init_oauth_db()\n    with connect(DB_PATH) as con:\n        row = con.execute(\n            "SELECT tokens FROM mcp_oauth_credentials WHERE connector_id=? AND user_id=?",\n            (connector_id, user_id),\n        ).fetchone()\n    if not row or not row[0]:\n        return False\n    try:\n        token = json.loads(row[0])\n        return bool(isinstance(token, dict) and token.get("access_token"))\n    except (TypeError, json.JSONDecodeError):\n        return False\n\n\ndef oauth_status(user_id: int, connector_id: int) -> dict[str, Any]:
     _connector(user_id, connector_id)
     storage = DatabaseOAuthStorage(user_id, connector_id)
     async def read():
