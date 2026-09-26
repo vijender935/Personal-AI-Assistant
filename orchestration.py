@@ -165,9 +165,12 @@ def build_execution_plan(plan: TaskPlan) -> ExecutionPlan:
         steps.append("mcp_tool_execution")
     steps.extend(["validate_tool_results", "compose_answer"])
 
+    # Keep a bounded safety cap, but allow enough rounds for MCP workflows
+    # that may require discovery -> lookup -> validation -> final retrieval.
+    # The agent-level MAX_ITERATIONS remains the hard global ceiling.
     max_tool_rounds = (
-        4 if plan.complexity == "complex"
-        else 2 if plan.complexity == "tool"
+        8 if plan.complexity == "complex"
+        else 4 if plan.complexity == "tool"
         else 1
     )
     return ExecutionPlan(steps=tuple(steps), max_tool_rounds=max_tool_rounds)
