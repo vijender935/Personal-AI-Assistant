@@ -271,12 +271,12 @@ def stream_agent(goal, session_id="default", image_urls=None, rag_sources=None, 
         yield "❌ GROQ_API_KEY set nahi hai."
         return
 
-    _prepare_goal(goal, user_id)
+    _prepare_goal(goal)
     task_plan = plan_task(goal)
     execution_plan = build_execution_plan(task_plan)
     client = Groq(api_key=api_key)
-    messages = build_messages(goal, session_id, user_id=user_id, rag_sources=rag_sources, memory_enabled=memory_enabled)
-    tool_schemas = _tool_schemas_for(user_id, goal, web_search_enabled=web_search_enabled)
+    messages = build_messages(goal, session_id, rag_sources=rag_sources, memory_enabled=memory_enabled)
+    tool_schemas = _tool_schemas_for(goal, web_search_enabled=web_search_enabled)
 
     if image_urls:
         messages[-1]["content"] = [{"type": "text", "text": goal}] + [
@@ -307,7 +307,7 @@ def stream_agent(goal, session_id="default", image_urls=None, rag_sources=None, 
                         yield delta
                 answer = "".join(parts)
                 if answer:
-                    save_turn(session_id, goal, answer, user_id=user_id)
+                    save_turn(session_id, goal, answer)
                 return
             except Exception as exc:
                 logger.warning(
@@ -362,7 +362,7 @@ def stream_agent(goal, session_id="default", image_urls=None, rag_sources=None, 
                 args = json.loads(call.function.arguments or "{}")
             except json.JSONDecodeError:
                 args = {}
-            result = _execute_tool(name, args, user_id)
+            result = _execute_tool(name, args)
             validated = validate_tool_result(result)
             messages.append({
                 "role": "tool",
@@ -405,7 +405,7 @@ def stream_agent(goal, session_id="default", image_urls=None, rag_sources=None, 
                     yield delta
             answer = "".join(parts)
             if answer:
-                save_turn(session_id, goal, answer, user_id=user_id)
+                save_turn(session_id, goal, answer)
             return
         except Exception as exc:
             logger.warning(
