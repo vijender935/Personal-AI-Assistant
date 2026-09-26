@@ -94,7 +94,7 @@ def _ensure_column(con, table, column, definition):
             con.execute(f"ALTER TABLE {table} ADD COLUMN {column} {definition}")
 
 
-def list_connectors(user_id):
+def list_connectors(user_id, *, redact_headers=False):
     init_connectors_db()
     with connect(DB_PATH) as con:
         rows=con.execute("SELECT id,name,transport,url,headers,allowed_tools,enabled,created_at FROM mcp_connectors WHERE user_id=? ORDER BY name",(user_id,)).fetchall()
@@ -105,12 +105,12 @@ def list_connectors(user_id):
         try: header_map=json.loads(headers)
         except (json.JSONDecodeError, TypeError): header_map={}
         if not isinstance(header_map, dict): header_map={}
-        result.append({"id":connector_id,"name":name,"transport":transport,"url":url,"headers":header_map,"allowed_tools":tools if isinstance(tools,list) else [],"enabled":bool(enabled),"created_at":created_at})
+        result.append({"id":connector_id,"name":name,"transport":transport,"url":url,"headers":({key: "***" for key in header_map} if redact_headers else header_map),"allowed_tools":tools if isinstance(tools,list) else [],"enabled":bool(enabled),"created_at":created_at})
     return result
 
 
 def get_connector_configs(user_id):
-    return [item for item in list_connectors(user_id) if item["enabled"]]
+    return [item for item in list_connectors(user_id, redact_headers=False) if item["enabled"]]
 
 
 def upsert_connector(user_id,name,transport,url,allowed_tools=None,headers=None):
