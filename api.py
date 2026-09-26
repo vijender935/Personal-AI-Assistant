@@ -203,6 +203,7 @@ class MCPConnectorRequest(BaseModel):
     transport: str = Field(default="streamable-http")
     url: str = Field(..., min_length=8, max_length=2000)
     allowed_tools: list[str] = Field(default_factory=list, max_length=100)
+    headers: dict[str, str] = Field(default_factory=dict)
 
 
 @app.get("/api/v1/mcp/connectors")
@@ -219,6 +220,7 @@ def add_mcp_connector(request: MCPConnectorRequest, user=Depends(current_user)):
             request.transport,
             request.url,
             request.allowed_tools,
+            request.headers,
         )
     except ValueError as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc
@@ -231,14 +233,15 @@ def test_mcp_connector(connector_id: int, user=Depends(current_user)):
     if not connector:
         raise HTTPException(status_code=404, detail="Connector not found.")
     try:
-        from mcp_client import discover_tool_schemas
-        schemas = discover_tool_schemas(user["id"])
-        from mcp_client import _safe_tool_component
-        prefix = "mcp__" + _safe_tool_component(connector["name"]) + "__"
-        matching = [s for s in schemas if str(s.get("function", {}).get("name", "")).startswith(prefix)]
-        return {"ok": True, "tools": len(matching)}
+        from mcp_client import discover_connector_tool_schemas
+        matching = discover_connector_tool_schemas(user["id"], connector["name"])
+        return {"ok": True, "tools": len(matching), "tool_names": [s.get("function", {}).get("name") for s in matching]}
     except Exception as exc:
-        raise HTTPException(status_code=502, detail="MCP connector test failed.") from exc
+        logger.exception("MCP connector test failed: %s", connector["name"])
+        detail = str(exc).strip() or "Unknown MCP connection error."
+        if len(detail) > 500:
+            detail = detail[:500]
+        raise HTTPException(status_code=502, detail=f"MCP connector test failed: {detail}") from exc
 
 
 @app.delete("/api/v1/mcp/connectors/{connector_id}")
