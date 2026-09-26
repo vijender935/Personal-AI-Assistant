@@ -1,4 +1,4 @@
-"""Document and OCR extraction helpers for the authenticated file pipeline."""
+"""Document and OCR extraction helpers for the local file pipeline."""
 from __future__ import annotations
 
 import csv
