@@ -18,7 +18,7 @@ from db import connect
 from tools import init_db, recall_memories, remember_fact, load_history, list_sessions, set_chat_title, get_chat_title, delete_chat, remove_last_assistant, remove_last_turn, save_turn
 from memory import index_document, search_rag, rag_source_status, delete_semantic_memory, delete_rag_source, remember_semantic
 from auth import authenticate, create_session, create_user, get_user, init_auth_db, revoke_session
-from multimodal import save_upload, read_upload, image_data_url, ensure_local_file, _safe_path
+from multimodal import save_upload, read_upload, image_data_url, ensure_local_file, delete_upload, list_uploads, _safe_path
 from mcp_registry import registry_snapshot
 from connectors import init_connectors_db, list_connectors, upsert_connector, delete_connector
 from document_parser import extract_and_limit, is_supported_document
@@ -527,24 +527,7 @@ async def upload_file(file: UploadFile = File(...), user=Depends(current_user)):
 
 @app.get("/api/v1/files")
 def list_files(user=Depends(current_user)):
-    root = (FILE_ROOT / f"user_{user['id']}").resolve()
-    root.mkdir(parents=True, exist_ok=True)
-    files = []
-    import mimetypes
-    for candidate in sorted(root.rglob("*")):
-        if not candidate.is_file():
-            continue
-        relative = str(candidate.relative_to(root))
-        stat = candidate.stat()
-        mime, _ = mimetypes.guess_type(candidate.name)
-        files.append({
-            "path": relative,
-            "name": candidate.name,
-            "size": stat.st_size,
-            "mime_type": mime or "application/octet-stream",
-            "extension": candidate.suffix.lower(),
-            "modified_at": stat.st_mtime,
-        })
+    files = list_uploads(user["id"])
     rag_status = {item["source"]: item for item in rag_source_status(user_id=user["id"])}
     for item in files:
         status = rag_status.get(item["path"])
@@ -557,9 +540,7 @@ def list_files(user=Depends(current_user)):
 @app.get("/api/v1/files/{path:path}")
 def get_file(path: str, user=Depends(current_user)):
     try:
-        candidate = _safe_path(path, user["id"])
-        if not candidate.is_file():
-            raise FileNotFoundError(path)
+        candidate = ensure_local_file(path, user["id"])
     except (FileNotFoundError, PermissionError) as exc:
         raise HTTPException(status_code=404, detail="File not found.") from exc
     import mimetypes
@@ -570,10 +551,7 @@ def get_file(path: str, user=Depends(current_user)):
 @app.delete("/api/v1/files/{path:path}")
 def delete_file(path: str, user=Depends(current_user)):
     try:
-        candidate = _safe_path(path, user["id"])
-        if not candidate.is_file():
-            raise FileNotFoundError(path)
-        candidate.unlink()
+        delete_upload(path, user_id=user["id"])
         deleted_chunks = delete_rag_source(path, user_id=user["id"])
         return {"deleted": True, "path": path, "rag_chunks_deleted": deleted_chunks}
     except (FileNotFoundError, PermissionError) as exc:
