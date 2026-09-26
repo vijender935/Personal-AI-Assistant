@@ -305,11 +305,11 @@ async def mcp_oauth_callback(
 ):
     if error:
         return HTMLResponse(f"<h2>MCP authorization failed</h2><p>{error[:300]}</p>", status_code=400)
-    if not flow_id or not code:
+    if not code or (not flow_id and not state):
         return HTMLResponse("<h2>MCP authorization failed</h2><p>Missing OAuth callback parameters.</p>", status_code=400)
     try:
         from mcp_oauth import complete_oauth
-        await complete_oauth(flow_id, code, state, iss)
+        await complete_oauth(flow_id or "", code, state, iss)
         return HTMLResponse(
             "<h2>MCP connected</h2><p>You can return to Personal AI Assistant.</p>"
             "<script>window.close()</script>"
