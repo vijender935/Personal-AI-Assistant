@@ -10,6 +10,7 @@ export default function useMCP({API,token,notify}){
  const [connectors,setConnectors]=useState([]);
  const [connectorForm,setConnectorForm]=useState(emptyForm);
  const [connectorLoading,setConnectorLoading]=useState(false);
+ const [connectorTesting,setConnectorTesting]=useState(null);
 
  const loadConnectors=useCallback(async()=>{
   if(!token)return;
@@ -42,6 +43,16 @@ export default function useMCP({API,token,notify}){
   finally{setConnectorLoading(false)}
  }
 
+ async function testConnector(id){
+  setConnectorTesting(id);
+  try{
+   const r=await fetch(API+"/api/v1/mcp/connectors/"+encodeURIComponent(id)+"/test",{method:"POST",headers:{Authorization:"Bearer "+token}});
+   const d=await r.json().catch(()=>({}));
+   if(!r.ok){notify(d.detail||"MCP test failed");return false}
+   notify("MCP connected — "+d.tools+" tool(s) discovered","success");return true;
+  }catch{notify("MCP test failed");return false}finally{setConnectorTesting(null)}
+ }
+
  async function deleteConnectorById(id){
   try{
    const r=await fetch(API+"/api/v1/mcp/connectors/"+encodeURIComponent(id),{method:"DELETE",headers:{Authorization:"Bearer "+token}});
@@ -49,5 +60,5 @@ export default function useMCP({API,token,notify}){
   }catch{notify("Connector delete failed")}
  }
 
- return {connectors,connectorForm,setConnectorForm,connectorLoading,loadConnectors,addConnector,deleteConnectorById};
+ return {connectors,connectorForm,setConnectorForm,connectorLoading,connectorTesting,loadConnectors,addConnector,testConnector,deleteConnectorById};
 }
