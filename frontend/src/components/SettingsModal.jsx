@@ -12,7 +12,7 @@ function Section({title,children}){return <section className="settings-section">
 
 export default function SettingsModal({
  open,onClose,onMemory,user,connectorForm,setConnectorForm,connectorLoading,connectorTesting,
- addConnector,testConnector,connectors,deleteConnectorById,settings,settingsLoading,updateSettings,onSignOut
+ addConnector,testConnector,connectors,deleteConnectorById,settings,settingsLoading,updateSettings,onSignOut,onClearChats
 }){
  const [page,setPage]=useState("main");
  const [instructions,setInstructions]=useState("");
@@ -81,6 +81,14 @@ export default function SettingsModal({
   </main>
  </div></div>;
 
+ if(page==="data") return <div className="settings-screen"><div className="settings-page">
+  <header className="settings-topbar"><button className="settings-icon-btn" onClick={()=>setPage("main")}><ArrowLeft size={25}/></button><h1>Data Controls</h1><span className="settings-topbar-spacer"/></header>
+  <main className="settings-content"><Section title="Chat data">
+   <div className="settings-inline-note"><Database size={18}/><span>Your chat history is stored for your account. Clearing it removes all saved conversations from the backend.</span></div>
+   <button className="settings-danger-btn" onClick={async()=>{if(window.confirm("Delete all chat history? This cannot be undone.")){const ok=await onClearChats();if(ok)setPage("main")}}}>Delete all chat history</button>
+  </Section></main>
+ </div></div>;
+
  if(page==="privacy") return <div className="settings-screen"><div className="settings-page">
   <header className="settings-topbar"><button className="settings-icon-btn" onClick={()=>setPage("main")}><ArrowLeft size={25}/></button><h1>Privacy & Security</h1><span className="settings-topbar-spacer"/></header>
   <main className="settings-content"><Section title="Account">
@@ -112,7 +120,7 @@ export default function SettingsModal({
 
    <Section title="Data & Information">
     <Row icon={Link2} title="Shared Conversations" subtitle="Sharing is not enabled yet" disabled/>
-    <Row icon={Database} title="Data Controls" subtitle="Chat and memory controls" onClick={onMemory}/>
+    <Row icon={Database} title="Data Controls" subtitle="Chat and memory controls" onClick={()=>setPage("data")}/>
     <Row icon={FileText} title="Open Source Licenses" subtitle="Application dependencies" disabled/>
     <Row icon={LockKeyhole} title="Privacy Policy" subtitle="Local application policy" disabled/>
    </Section>
