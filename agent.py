@@ -33,8 +33,10 @@ def _extract_memory_candidate(text):
 
 def build_messages(goal, session_id, user_id=0, rag_sources=None, memory_enabled=True):
     history = load_history(session_id, MAX_HISTORY_MESSAGES, user_id=user_id)
-    memories = semantic_recall_memories(goal, limit=8, user_id=user_id) if memory_enabled else []
     plan = plan_task(goal)
+    # Avoid vector/RAG lookups for ordinary conversation; they add latency and
+    # are only useful when the request actually asks for memory/document context.
+    memories = semantic_recall_memories(goal, limit=8, user_id=user_id) if (memory_enabled and plan.needs_memory) else []
     messages = [{"role": "system", "content": SYSTEM_PROMPT}, {"role": "system", "content": plan_prompt(plan)}]
     if memories:
         messages.append({
@@ -43,7 +45,7 @@ def build_messages(goal, session_id, user_id=0, rag_sources=None, memory_enabled
         })
     try:
         from memory import search_rag
-        rag_results = search_rag(goal, limit=4, user_id=user_id, sources=rag_sources)
+        rag_results = search_rag(goal, limit=4, user_id=user_id, sources=rag_sources) if (rag_sources or plan.needs_rag) else []
     except Exception:
         rag_results = []
     if rag_results:
