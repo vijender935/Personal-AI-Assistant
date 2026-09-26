@@ -103,6 +103,31 @@ async def _discover_async(user_id: int = 0) -> list[dict[str, Any]]:
     return discovered
 
 
+def discover_connector_tool_schemas(user_id: int, server_name: str) -> list[dict[str, Any]]:
+    """Discover one configured connector and surface its real connection errors."""
+    config = next((item for item in load_server_configs(user_id) if item.name == server_name), None)
+    if config is None:
+        raise ValueError(f"MCP server {server_name!r} is not configured.")
+    async def discover_one():
+        async with _client_context(config) as client:
+            result = await client.list_tools()
+            schemas=[]
+            for tool in result.tools:
+                if not tool_allowed(config, tool.name):
+                    continue
+                schema = getattr(tool, "inputSchema", None) or {"type":"object","properties":{}}
+                schemas.append({
+                    "type":"function",
+                    "function":{
+                        "name":f"mcp__{_safe_tool_component(config.name)}__{_safe_tool_component(tool.name)}",
+                        "description":tool.description or f"MCP tool {tool.name}",
+                        "parameters":schema,
+                    },
+                })
+            return schemas
+    return asyncio.run(asyncio.wait_for(discover_one(), timeout=_timeout_seconds()))
+
+
 def discover_tool_schemas(user_id: int = 0) -> list[dict[str, Any]]:
     key = _registry_key(user_id)
     now = time.monotonic()
