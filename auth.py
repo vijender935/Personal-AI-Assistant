@@ -37,6 +37,7 @@ def create_user(name,email,password):
         if "unique" in str(exc).lower() or "duplicate" in str(exc).lower(): raise ValueError("An account with this email already exists.") from exc
         raise
 def authenticate(email,password):
+    email = email.strip().lower()
     with connect(DB_PATH) as con: row=con.execute("SELECT id,name,email,password_hash FROM users WHERE email=?",(email.strip().lower(),)).fetchone()
     if not row or not _verify_password(password,row[3]): return None
     return {"id":row[0],"name":row[1],"email":row[2]}
