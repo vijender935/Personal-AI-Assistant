@@ -10,6 +10,6 @@ def test_shell_allowlist(tmp_path,monkeypatch):
  monkeypatch.setattr(tools,"ALLOW_SHELL",True);monkeypatch.setattr(tools,"FILE_ROOT",tmp_path);monkeypatch.setattr(tools,"ALLOWED_SHELL_COMMANDS",{"echo"})
  result=tools.run_shell("echo hello");assert "exit_code=0" in result and "hello" in result
 def test_chat_helpers(tmp_path,monkeypatch):
- monkeypatch.setattr(tools,"DB_PATH",tmp_path/"assistant.db");tools.init_db();tools.save_turn("s1","hello","world");tools.set_chat_title("s1","My chat")
+ tools.init_db();tools.save_turn("s1","hello","world");tools.set_chat_title("s1","My chat")
  assert tools.get_chat_title("s1")=="My chat";assert tools.remove_last_assistant("s1") is True;assert tools.load_history("s1")[-1]["role"]=="user"
  tools.save_turn("s1","hello","again");assert tools.remove_last_turn("s1") is True;tools.delete_chat("s1");assert tools.load_history("s1")==[]
