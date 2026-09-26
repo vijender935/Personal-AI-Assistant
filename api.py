@@ -33,7 +33,7 @@ def _check_chat_rate_limit(key):
             if not v or v[-1]<cutoff:_chat_attempts.pop(k,None)
 
 ensure_directories()
-if not os.getenv("DATABASE_URL","").strip(): raise RuntimeError("DATABASE_URL is required. SQLite is not supported.")
+if not os.getenv("DATABASE_URL","").strip(): raise RuntimeError("DATABASE_URL is required.")
 init_db(); init_semantic_store(); init_connectors_db(); init_preferences_db(); init_auth_db()
 
 app=FastAPI(title="Personal AI Assistant API",version="1.0.0",description="REST API for a single-user personal AI assistant.")
