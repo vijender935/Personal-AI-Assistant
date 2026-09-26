@@ -105,5 +105,6 @@ def test_mcp_oauth_storage_starts_empty(monkeypatch, tmp_path):
     monkeypatch.setattr(mcp_oauth, "DB_PATH", str(tmp_path / "oauth.sqlite3"))
     monkeypatch.setattr(mcp_oauth, "ensure_directories", lambda: None)
     monkeypatch.setattr(mcp_oauth, "using_postgres", lambda: False)
+    monkeypatch.setattr(mcp_oauth, "_connector", lambda user_id, connector_id: {"id": connector_id, "transport": "streamable-http", "url": "https://example.com/mcp"})
     assert not mcp_oauth.oauth_token_present(7, 42)
     assert mcp_oauth.oauth_status(7, 42)["connected"] is False
