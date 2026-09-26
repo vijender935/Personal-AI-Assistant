@@ -124,7 +124,7 @@ TOOL_SCHEMAS=[
  {"type":"function","function":{"name":"calculator","description":"Evaluate a basic arithmetic expression.","parameters":{"type":"object","properties":{"expression":{"type":"string"}},"required":["expression"]}}},
  {"type":"function","function":{"name":"web_search","description":"Search the web for current information.","parameters":{"type":"object","properties":{"query":{"type":"string"}},"required":["query"]}}},
  {"type":"function","function":{"name":"read_file","description":"Read a local UTF-8 text file inside the allowed file root.","parameters":{"type":"object","properties":{"path":{"type":"string"}},"required":["path"]}}},
- {"type":"function","function":{"name":"write_file","description":"Write a local UTF-8 text file inside the allowed file root.","parameters":{"type":"object","function":{"name":"write_file","description":"Write a local UTF-8 text file inside the allowed file root.","parameters":{"type":"object","properties":{"path":{"type":"string"},"content":{"type":"string"}},"required":["path","content"]}}}}},
+ {"type":"function","function":{"name":"write_file","description":"Write a local UTF-8 text file inside the allowed file root.","parameters":{"type":"object","properties":{"path":{"type":"string"},"content":{"type":"string"}},"required":["path","content"]}}},
  {"type":"function","function":{"name":"run_shell","description":"Run an allowlisted local command only when shell access is explicitly enabled.","parameters":{"type":"object","properties":{"command":{"type":"string"}},"required":["command"]}}}
 ]
 def set_chat_title(session_id,title):
