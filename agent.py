@@ -302,7 +302,9 @@ def stream_agent(goal, session_id="default", user_id=0, image_urls=None, rag_sou
                     MAX_RETRIES,
                     exc,
                 )
-                if parts or retry >= MAX_RETRIES:
+                status_code = getattr(exc, "status_code", None)
+                non_retryable = status_code is not None and 400 <= status_code < 500 and status_code != 429
+                if parts or non_retryable or retry >= MAX_RETRIES:
                     logger.exception("Fast streaming request failed permanently")
                     yield "❌ Streaming request failed."
                     return
@@ -398,7 +400,9 @@ def stream_agent(goal, session_id="default", user_id=0, image_urls=None, rag_sou
                 MAX_RETRIES,
                 exc,
             )
-            if parts or retry >= MAX_RETRIES:
+            status_code = getattr(exc, "status_code", None)
+            non_retryable = status_code is not None and 400 <= status_code < 500 and status_code != 429
+            if parts or non_retryable or retry >= MAX_RETRIES:
                 logger.exception("Streaming final model request failed permanently")
                 yield "❌ Streaming request failed."
                 return
