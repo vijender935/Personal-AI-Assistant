@@ -137,6 +137,7 @@ def run_agent(goal, session_id="default", user_id=0, image_urls=None, rag_source
         ]
 
     state = ExecutionState()
+    prepared_final_response = False
     while should_continue_execution(state, min(MAX_ITERATIONS, execution_plan.max_tool_rounds)):
         state.round_number += 1
         response = None
@@ -248,6 +249,7 @@ def stream_agent(goal, session_id="default", user_id=0, image_urls=None, rag_sou
         msg = response.choices[0].message
         messages.append(msg.model_dump(exclude_none=True))
         if not msg.tool_calls:
+            prepared_final_response = True
             break
 
         for call in msg.tool_calls:
@@ -278,7 +280,7 @@ def stream_agent(goal, session_id="default", user_id=0, image_urls=None, rag_sou
     if state.consecutive_failures >= 2:
         yield "⚠️ Tool execution repeatedly failed."
         return
-    if state.round_number >= min(MAX_ITERATIONS, execution_plan.max_tool_rounds) and messages[-1].get("role") != "tool":
+    if not prepared_final_response and state.round_number >= min(MAX_ITERATIONS, execution_plan.max_tool_rounds):
         yield "⚠️ Max tool iterations reached — task incomplete reh gaya."
         return
 
