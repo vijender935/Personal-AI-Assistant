@@ -208,7 +208,7 @@ class MCPConnectorRequest(BaseModel):
 
 @app.get("/api/v1/mcp/connectors")
 def get_mcp_connectors(user=Depends(current_user)):
-    return {"connectors": list_connectors(user["id"])}
+    return {"connectors": list_connectors(user["id"], redact_headers=True)}
 
 
 @app.post("/api/v1/mcp/connectors")
@@ -224,6 +224,7 @@ def add_mcp_connector(request: MCPConnectorRequest, user=Depends(current_user)):
         )
     except ValueError as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc
+    connector["headers"] = {key: "***" for key in connector.get("headers", {})}
     return {"connector": connector}
 
 
