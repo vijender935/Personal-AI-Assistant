@@ -8,7 +8,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from starlette.middleware.base import BaseHTTPMiddleware
 from pydantic import BaseModel,Field
 from agent import MODEL,VISION_MODEL,run_agent,stream_agent
-from config import ALLOW_SHELL,DB_PATH,FILE_ROOT,REQUIRE_PERSISTENT_DB,ensure_directories
+from config import ALLOW_SHELL,FILE_ROOT,ensure_directories
 from db import connect
 from tools import init_db,recall_memories,remember_fact,load_history,list_sessions,set_chat_title,get_chat_title,delete_chat,remove_last_assistant,remove_last_turn,save_turn
 from memory import init_semantic_store,index_document,search_rag,rag_source_status,delete_semantic_memory,delete_rag_source,remember_semantic
@@ -33,7 +33,7 @@ def _check_chat_rate_limit(key):
             if not v or v[-1]<cutoff:_chat_attempts.pop(k,None)
 
 ensure_directories()
-if REQUIRE_PERSISTENT_DB and not os.getenv("DATABASE_URL","").strip(): raise RuntimeError("REQUIRE_PERSISTENT_DB is enabled but DATABASE_URL is not configured.")
+if not os.getenv("DATABASE_URL","").strip(): raise RuntimeError("DATABASE_URL is required. SQLite is not supported.")
 init_db(); init_semantic_store(); init_connectors_db(); init_preferences_db(); init_auth_db()
 
 app=FastAPI(title="Personal AI Assistant API",version="1.0.0",description="REST API for a single-user personal AI assistant.")
@@ -81,7 +81,7 @@ class RAGDocumentRequest(BaseModel):
     source:str=Field(...,min_length=1,max_length=500); content:str=Field(...,min_length=1,max_length=200000)
 
 @app.get("/health")
-def health(): return {"status":"ok","service":"personal-ai-assistant","model":MODEL,"shell_enabled":ALLOW_SHELL,"database":"postgresql" if os.getenv("DATABASE_URL","").strip() else "sqlite","persistent_database":bool(os.getenv("DATABASE_URL","").strip())}
+def health(): return {"status":"ok","service":"personal-ai-assistant","model":MODEL,"shell_enabled":ALLOW_SHELL,"database":"postgresql","persistent_database":True}
 @app.get("/api/v1/info")
 def info(): return {"name":"Personal AI Assistant","version":"1.0.0","model":MODEL,"shell_enabled":ALLOW_SHELL,"mode":"single-user"}
 
@@ -110,7 +110,7 @@ def auth_login_route(request:AuthCredentials,raw_request:Request):
     from fastapi.responses import JSONResponse
     out=JSONResponse({"authenticated":True,"account":account})
     secure=raw_request.url.scheme=="https" or raw_request.headers.get("x-forwarded-proto","").lower()=="https"
-    out.set_cookie(SESSION_COOKIE,token,httponly=True,samesite="lax",secure=secure,max_age=30*86400,path="/")
+    out.set_cookie(SESSION_COOKIE,token,httponly=True,samesite="lax",secure=secure,max_age=SESSION_DAYS*86400,path="/")
     return out
 
 @app.get("/api/v1/auth/me")
@@ -283,7 +283,7 @@ def create_memory(request:MemoryRequest):
 def delete_memory(fact:str):
     exact=fact.strip()
     deleted_exact=delete_semantic_memory(exact)
-    with connect(DB_PATH) as con:
+    with connect() as con:
         cur=con.execute("DELETE FROM memories WHERE fact=?",(exact,))
     return {"deleted":bool(cur.rowcount or deleted_exact),"fact":exact}
 @app.get("/api/v1/memories")
