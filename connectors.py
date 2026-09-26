@@ -69,6 +69,8 @@ def _migrate_legacy_schema():
             cols = []
         if "user_id" in cols:
             if using_postgres():
+                try: con.execute("ALTER TABLE mcp_connectors DROP CONSTRAINT IF EXISTS mcp_connectors_user_id_name_key")
+                except Exception: pass
                 con.execute("ALTER TABLE mcp_connectors DROP COLUMN IF EXISTS user_id")
             else:
                 con.execute("CREATE TABLE IF NOT EXISTS mcp_connectors_new(id INTEGER PRIMARY KEY AUTOINCREMENT,name TEXT NOT NULL UNIQUE,transport TEXT NOT NULL,url TEXT NOT NULL,allowed_tools TEXT NOT NULL DEFAULT '[]',enabled INTEGER NOT NULL DEFAULT 1,headers TEXT NOT NULL DEFAULT '{}',created_at DATETIME DEFAULT CURRENT_TIMESTAMP)")
