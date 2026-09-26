@@ -50,7 +50,8 @@ _LOCAL_TERMS = {
 }
 _MCP_TERMS = {
     "github", "slack", "notion", "telegram", "mcp", "repository", "repo",
-    "pull request", "issue",
+    "pull request", "issue", "database", "db", "sql", "table", "record",
+    "records", "query", "queries",
 }
 _MEMORY_TERMS = {
     "remember", "memory", "yaad", "previous", "pehle", "last time",
@@ -132,24 +133,61 @@ def select_mcp_tools(
     goal: str,
     max_tools: int = 12,
 ) -> list[dict]:
-    """Select a bounded MCP tool subset using deterministic lexical relevance."""
+    """Select a bounded MCP tool subset using weighted lexical relevance."""
     if max_tools < 1:
         return []
-    terms = {word for word in goal.lower().split() if len(word) >= 3}
+
+    import re
+
+    def terms_for(text: str) -> set[str]:
+        return {
+            token
+            for token in re.findall(r"[a-z0-9_]+", text.lower())
+            if len(token) >= 3
+        }
+
+    terms = terms_for(goal)
+    aliases = {
+        "database": {"db", "sql", "query", "rows", "records", "table", "data"},
+        "db": {"database", "sql", "query", "rows", "records", "table"},
+        "records": {"rows", "items", "data", "list", "search"},
+        "record": {"row", "item", "data"},
+        "table": {"rows", "records", "schema"},
+        "query": {"search", "execute", "sql", "select"},
+    }
     scored = []
     for schema in schemas:
         fn = schema.get("function", {})
         name = str(fn.get("name", "")).lower()
         description = str(fn.get("description", "")).lower()
-        haystack = f"{name} {description}"
-        score = sum(1 for term in terms if term in haystack)
+        parameters = fn.get("parameters") or {}
+        properties = parameters.get("properties") if isinstance(parameters, dict) else {}
+        property_text = " ".join(str(key) for key in properties.keys()) if isinstance(properties, dict) else ""
+
+        name_terms = terms_for(name)
+        description_terms = terms_for(description)
+        property_terms = terms_for(property_text)
+        combined = name_terms | description_terms | property_terms
+
+        score = 0
+        for term in terms:
+            if term in name_terms:
+                score += 6
+            elif term in description_terms:
+                score += 3
+            elif term in property_terms:
+                score += 2
+            for alias in aliases.get(term, set()):
+                if alias in combined:
+                    score += 1
+
         scored.append((score, name, schema))
+
     scored.sort(key=lambda item: (-item[0], item[1]))
     relevant = [item[2] for item in scored if item[0] > 0]
     if relevant:
         return relevant[:max_tools]
     return [item[2] for item in scored[:max_tools]]
-
 
 def build_execution_plan(plan: TaskPlan) -> ExecutionPlan:
     steps = ["understand_request"]
