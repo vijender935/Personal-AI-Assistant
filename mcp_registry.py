@@ -12,6 +12,8 @@ from connectors import validate_connector_url
 class MCPServerConfig:
     name: str
     transport: str
+    user_id: int = 0
+    connector_id: int | None = None
     command: str | None = None
     args: tuple[str, ...] = ()
     url: str | None = None
@@ -90,6 +92,8 @@ def load_server_configs(user_id: int | None = None) -> list[MCPServerConfig]:
                 MCPServerConfig(
                     name=item["name"],
                     transport=item["transport"],
+                    user_id=user_id,
+                    connector_id=item["id"],
                     url=item["url"],
                     headers=item.get("headers", {}) or {},
                     allowed_tools=tuple(item["allowed_tools"]),
