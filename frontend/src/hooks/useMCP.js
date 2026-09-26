@@ -40,6 +40,8 @@ export default function useMCP({API,token,notify}){
    if(!r.ok){notify(d.detail||"Connector add failed");return}
    setConnectors(cs=>[...cs.filter(x=>x.id!==d.connector.id),d.connector]);
    setConnectorForm(emptyForm);
+   if(d.status?.connected)notify(d.connector.name+" connected · "+(d.status.tools||0)+" tools","success");
+   else notify(d.status?.error||"Connector saved but could not connect.");
   }catch(e){notify(e instanceof SyntaxError?"Headers must be valid JSON.":"Connector add failed")}
   finally{setConnectorLoading(false)}
  }
@@ -50,7 +52,9 @@ export default function useMCP({API,token,notify}){
    const r=await fetch(API+"/api/v1/mcp/connectors/"+encodeURIComponent(id)+"/test",{method:"POST",headers:{Authorization:"Bearer "+token}});
    const d=await r.json().catch(()=>({}));
    if(!r.ok){notify(d.detail||"MCP test failed");return false}
-   notify("MCP connected — "+d.tools+" tool(s) discovered","success");return true;
+   setConnectors(cs=>cs.map(c=>c.id===id?{...c,status:{connected:!!d.connected,tools:d.tools||0,tool_names:d.tool_names||[],error:d.error}}:c));
+   if(d.connected){notify("MCP connected — "+(d.tools||0)+" tool(s) discovered","success");return true}
+   notify(d.error||"MCP connection failed");return false;
   }catch{notify("MCP test failed");return false}finally{setConnectorTesting(null)}
  }
 
