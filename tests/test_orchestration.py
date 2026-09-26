@@ -155,3 +155,30 @@ def test_stream_agent_omits_empty_tools_for_simple_messages(monkeypatch):
     assert calls[0].get("stream") is True
     assert "tools" not in calls[0]
     assert "tool_choice" not in calls[0]
+
+
+def test_mcp_plan_recognizes_database_requests():
+    from orchestration import plan_task
+
+    plan = plan_task("MCP se mere database ke latest records dikhao")
+    assert plan.intent == "external_tool"
+    assert plan.needs_mcp
+
+
+def test_select_mcp_tools_matches_database_language():
+    from orchestration import select_mcp_tools
+
+    schemas = [
+        {"type": "function", "function": {
+            "name": "mcp__db__list_rows",
+            "description": "List rows from a SQL table",
+            "parameters": {"type": "object", "properties": {"table": {"type": "string"}}},
+        }},
+        {"type": "function", "function": {
+            "name": "mcp__db__delete_rows",
+            "description": "Delete rows from a SQL table",
+            "parameters": {"type": "object", "properties": {"table": {"type": "string"}}},
+        }},
+    ]
+    selected = select_mcp_tools(schemas, "show database records", max_tools=1)
+    assert selected[0]["function"]["name"] == "mcp__db__list_rows"
