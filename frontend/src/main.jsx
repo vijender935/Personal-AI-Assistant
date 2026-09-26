@@ -20,10 +20,18 @@ function App(){
  const [chats,setChats]=useState(initial),[active,setActive]=useState("new"),[text,setText]=useState(""),[loading,setLoading]=useState(false),[sidebar,setSidebar]=useState(true),[settings,setSettings]=useState(false),[filesOpen,setFilesOpen]=useState(false),[fileQuery,setFileQuery]=useState(""),[user,setUser]=useState(null),[auth,setAuth]=useState({email:"",password:"",name:""}),[authMode,setAuthMode]=useState("login"),[authLoading,setAuthLoading]=useState(false),[attachments,setAttachments]=useState([]),[chatQuery,setChatQuery]=useState(""),[copiedMessage,setCopiedMessage]=useState(null),[memoryOpen,setMemoryOpen]=useState(false),[toast,setToast]=useState(null),[confirmState,setConfirmState]=useState(null),[editState,setEditState]=useState(null),[renameState,setRenameState]=useState(null),[webSearch,setWebSearch]=useState(true),[memory,setMemory]=useState(true);
  const token=localStorage.getItem("personal_ai_token");
  function notify(message,type="error"){setToast({message,type});window.clearTimeout(notify.timer);notify.timer=window.setTimeout(()=>setToast(null),3200)}
+ function normalizeMessages(messages=[]){
+  const result=[];
+  for(const m of messages){
+   if(result.length&&result.at(-1)?.role===m.role&&result.at(-1)?.content===m.content)continue;
+   result.push(m);
+  }
+  return result;
+ }
 
  useEffect(()=>{if(!token)return;fetch(API+"/api/v1/auth/me",{headers:{Authorization:"Bearer "+token}}).then(async r=>{if(r.ok)setUser((await r.json()).user);else{localStorage.removeItem("personal_ai_token");setUser(null)}}).catch(()=>{});},[token]);
- useEffect(()=>{if(!token||!user)return;fetch(API+"/api/v1/chats",{headers:{Authorization:"Bearer "+token}}).then(async r=>{if(!r.ok)return;const d=await r.json();if(d.chats?.length){const normalized=d.chats.map(c=>({...c,id:c.session_id}));setChats(normalized);setActive(normalized[0].id)}}).catch(()=>{});},[token,user]);
- useEffect(()=>{if(!token||!user||!active||active==="new")return;let cancelled=false;fetch(API+"/api/v1/chats/"+encodeURIComponent(active),{headers:{Authorization:"Bearer "+token}}).then(async r=>{if(!r.ok)return;const d=await r.json();if(cancelled)return;setChats(cs=>cs.map(c=>c.id===active?{...c,messages:d.messages||[]}:c));}).catch(()=>{});return()=>{cancelled=true}},[active,token,user]);
+ useEffect(()=>{if(!token||!user)return;fetch(API+"/api/v1/chats",{headers:{Authorization:"Bearer "+token}}).then(async r=>{if(!r.ok)return;const d=await r.json();if(d.chats?.length){const normalized=d.chats.map(c=>({...c,id:c.session_id,messages:normalizeMessages(c.messages)}));setChats(normalized);setActive(normalized[0].id)}}).catch(()=>{});},[token,user]);
+ useEffect(()=>{if(!token||!user||!active||active==="new")return;let cancelled=false;fetch(API+"/api/v1/chats/"+encodeURIComponent(active),{headers:{Authorization:"Bearer "+token}}).then(async r=>{if(!r.ok)return;const d=await r.json();if(cancelled)return;setChats(cs=>cs.map(c=>c.id===active?{...c,messages:normalizeMessages(d.messages||[])}:c));}).catch(()=>{});return()=>{cancelled=true}},[active,token,user]);
 
  useEffect(()=>{if(user){loadFiles();loadConnectors();loadMemories()}},[user]);
  const {chat,update,regenerate,editLastUser,send,stopStream,newChat}=useChat({API,token,chats,setChats,active,setActive,text,setText,attachments,setAttachments,loading,setLoading,notify,webSearch,memory});
