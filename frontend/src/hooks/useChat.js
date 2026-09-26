@@ -20,8 +20,18 @@ export default function useChat({API,token,chats,setChats,active,setActive,text,
  const sendingRef=useRef(false);
  const chat=chats.find(c=>c.id===active)||chats[0];
 
+ function normalizeMessages(messages=[]){
+  const result=[];
+  for(const m of messages){
+   if(result.length&&result.at(-1)?.role===m.role&&result.at(-1)?.content===m.content)continue;
+   result.push(m);
+  }
+  return result;
+ }
+
  function update(messages){
-  setChats(cs=>cs.map(c=>c.id===active?{...c,messages,title:c.title==="New conversation"?(messages.find(m=>m.role==="user")?.content||"New conversation").slice(0,32):c.title}:c));
+  const normalized=normalizeMessages(messages);
+  setChats(cs=>cs.map(c=>c.id===active?{...c,messages:normalized,title:c.title==="New conversation"?(normalized.find(m=>m.role==="user")?.content||"New conversation").slice(0,32):c.title}:c));
  }
 
  async function regenerate(){
