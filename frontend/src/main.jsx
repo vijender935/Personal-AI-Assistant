@@ -20,6 +20,7 @@ const initial=[{id:"new",title:"New conversation",messages:[]}];
 function App(){
  const [chats,setChats]=useState(initial),[active,setActive]=useState("new"),[text,setText]=useState(""),[loading,setLoading]=useState(false),[sidebar,setSidebar]=useState(true),[settings,setSettings]=useState(false),[filesOpen,setFilesOpen]=useState(false),[fileQuery,setFileQuery]=useState(""),[user,setUser]=useState(null),[auth,setAuth]=useState({email:"",password:"",name:""}),[authMode,setAuthMode]=useState("login"),[authLoading,setAuthLoading]=useState(false),[attachments,setAttachments]=useState([]),[chatQuery,setChatQuery]=useState(""),[copiedMessage,setCopiedMessage]=useState(null),[memoryOpen,setMemoryOpen]=useState(false),[toast,setToast]=useState(null),[confirmState,setConfirmState]=useState(null),[editState,setEditState]=useState(null),[renameState,setRenameState]=useState(null),[webSearch,setWebSearch]=useState(true),[memory,setMemory]=useState(true);
  const token=localStorage.getItem("personal_ai_token");
+ const {settings:userSettings,settingsLoading,loadSettings,updateSettings}=useSettings({API,token,notify});
  function notify(message,type="error"){setToast({message,type});window.clearTimeout(notify.timer);notify.timer=window.setTimeout(()=>setToast(null),3200)}
  function normalizeMessages(messages=[]){
   const result=[];
@@ -37,7 +38,7 @@ function App(){
  useEffect(()=>{if(user){loadFiles();loadConnectors();loadMemories();loadSettings()}},[user]);
  useEffect(()=>{if(settings){setWebSearch(userSettings.web_search);setMemory(userSettings.memory)}},[userSettings.web_search,userSettings.memory]);
  const {chat,update,regenerate,editLastUser,send,stopStream,newChat}=useChat({API,token,chats,setChats,active,setActive,text,setText,attachments,setAttachments,loading,setLoading,notify,webSearch,memory});
- const {settings:userSettings,settingsLoading,loadSettings,updateSettings}=useSettings({API,token,notify});
+
  const {files,uploading,loadFiles,uploadFile,deleteFile,confirmDeleteFile,downloadFile}=useFiles({API,token,notify,setAttachments,requestDelete:setConfirmState});
  const {memories,memoryForm,setMemoryForm,loadMemories,saveMemory,deleteMemory}=useMemory({API,token,notify});
  const {connectors,connectorForm,setConnectorForm,connectorLoading,connectorTesting,loadConnectors,addConnector,testConnector,startOAuth,deleteConnectorById}=useMCP({API,token,notify});
