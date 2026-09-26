@@ -36,7 +36,7 @@ ensure_directories(); init_db(); init_semantic_store(); init_connectors_db(); in
 
 app=FastAPI(title="Personal AI Assistant API",version="1.0.0",description="REST API for a single-user personal AI assistant.")
 origins=[x.strip() for x in os.getenv("CORS_ORIGINS","http://localhost:3000,http://localhost:5173").split(",") if x.strip()]
-app.add_middleware(CORSMiddleware,allow_origins=origins,allow_credentials=False,allow_methods=["GET","POST","PATCH","DELETE","OPTIONS"],allow_headers=["Content-Type"])
+app.add_middleware(CORSMiddleware,allow_origins=origins,allow_credentials=True,allow_methods=["GET","POST","PATCH","DELETE","OPTIONS"],allow_headers=["Content-Type"])
 class SecurityHeadersMiddleware(BaseHTTPMiddleware):
     async def dispatch(self,request,call_next):
         response=await call_next(request); response.headers.setdefault("X-Content-Type-Options","nosniff"); response.headers.setdefault("X-Frame-Options","DENY"); response.headers.setdefault("Referrer-Policy","strict-origin-when-cross-origin"); return response
@@ -73,7 +73,7 @@ class MCPConnectorRequest(BaseModel):
 class AuthCredentials(BaseModel): email:str=Field(...,min_length=3,max_length=254); password:str=Field(...,min_length=8,max_length=200)
 class AccountSetupRequest(AuthCredentials): display_name:str=Field(...,min_length=1,max_length=80)
 class AccountUpdateRequest(BaseModel): display_name:str=Field(...,min_length=1,max_length=80); email:str=Field(...,min_length=3,max_length=254)
-class PasswordChangeRequest(BaseModel): current_password:str=Field(...,min_length=8,max_length=200)
+class PasswordChangeRequest(BaseModel): current_password:str=Field(...,min_length=8,max_length=200); new_password:str=Field(...,min_length=8,max_length=200)
 class ChatTitleRequest(BaseModel): title:str=Field(...,min_length=1,max_length=80)
 class RAGDocumentRequest(BaseModel):
     source:str=Field(...,min_length=1,max_length=500); content:str=Field(...,min_length=1,max_length=200000)
