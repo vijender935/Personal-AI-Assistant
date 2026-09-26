@@ -23,3 +23,27 @@ def test_connector_header_persistence(monkeypatch):
  finally:
   rows=[x for x in connectors.list_connectors() if x["name"]==name]
   if rows: connectors.delete_connector(rows[0]["id"])
+
+def test_orchestrator_uses_stable_server_tool_names():
+ import mcp_client
+ from types import SimpleNamespace
+ token=mcp_client._CURRENT_SERVER_NAME.set("github-main")
+ try:
+  assert mcp_client._component_name("list_issues",SimpleNamespace(name="GitHub"))=="github-main__list_issues"
+ finally:
+  mcp_client._CURRENT_SERVER_NAME.reset(token)
+
+
+def test_connector_status_persists(monkeypatch):
+ import connectors
+ name="status-test"
+ try:
+  c=connectors.upsert_connector(name,"streamable-http","https://example.com/mcp")
+  updated=connectors.update_connector_status(c["id"],{"connected":True,"tools":2,"tool_names":["mcp__status-test__one","mcp__status-test__two"]})
+  assert updated["status"]["connected"] is True
+  assert updated["status"]["tools"]==2
+  listed=next(x for x in connectors.list_connectors() if x["id"]==c["id"])
+  assert listed["status"]["tool_names"][-1].endswith("__two")
+ finally:
+  rows=[x for x in connectors.list_connectors() if x["name"]==name]
+  if rows: connectors.delete_connector(rows[0]["id"])
