@@ -99,7 +99,7 @@ def auth_setup(request:AccountSetupRequest,raw_request:Request):
     from fastapi.responses import JSONResponse
     out=JSONResponse({"authenticated":True,"account":account})
     secure=raw_request.url.scheme=="https" or raw_request.headers.get("x-forwarded-proto","").lower()=="https"
-    out.set_cookie(SESSION_COOKIE,token,httponly=True,samesite="lax",secure=secure,max_age=30*86400,path="/")
+    out.set_cookie(SESSION_COOKIE,token,httponly=True,samesite="none" if secure else "lax",secure=secure,max_age=30*86400,path="/")
     return out
 
 @app.post("/api/v1/auth/login")
