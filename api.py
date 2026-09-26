@@ -382,6 +382,16 @@ def chat_stream(request: ChatRequest, raw_request: Request, user=Depends(current
     )
 
 
+@app.delete("/api/v1/chats")
+def remove_all_chats(user=Depends(current_user)):
+    sessions = list_sessions(user_id=user["id"], limit=1000)
+    deleted = 0
+    for session in sessions:
+        if delete_chat(session, user_id=user["id"]):
+            deleted += 1
+    return {"deleted": deleted}
+
+
 @app.get("/api/v1/chats")
 def list_chats(limit: int = 50, user=Depends(current_user)):
     limit = max(1, min(limit, 100))
