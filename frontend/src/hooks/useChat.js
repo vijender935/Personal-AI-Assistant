@@ -15,7 +15,7 @@ export function getEditableLastUser(messages){
  return old?.role==="user"?{value:old.content,index:userIndex}:null;
 }
 
-export default function useChat({API,token,chats,setChats,active,setActive,text,setText,attachments,setAttachments,loading,setLoading,notify}){
+export default function useChat({API,token,chats,setChats,active,setActive,text,setText,attachments,setAttachments,loading,setLoading,notify,webSearch,memory}){
  const [streamController,setStreamController]=useState(null);
  const chat=chats.find(c=>c.id===active)||chats[0];
 
@@ -45,7 +45,7 @@ export default function useChat({API,token,chats,setChats,active,setActive,text,
   const next=[...chat.messages,{role:"user",content:message},{role:"assistant",content:""}];
   update(next);setText("");setLoading(true);
   try{
-   const r=await fetch(API+"/api/v1/chat/stream",{method:"POST",headers:{"Content-Type":"application/json",Authorization:"Bearer "+token},body:JSON.stringify({message,session_id:active,attachment_paths:attachments.map(a=>a.path)}),signal:controller.signal});
+   const r=await fetch(API+"/api/v1/chat/stream",{method:"POST",headers:{"Content-Type":"application/json",Authorization:"Bearer "+token},body:JSON.stringify({message,session_id:active,attachment_paths:attachments.map(a=>a.path),web_search:webSearch,memory}),signal:controller.signal});
    if(!r.ok){update([...next.slice(0,-1),{role:"user",content:message},{role:"assistant",content:await responseDetail(r,"Request failed.")}]);return}
    if(!r.body)throw new Error("Streaming response unavailable.");
    const reader=r.body.getReader(),decoder=new TextDecoder();let buffer="",answer="";
