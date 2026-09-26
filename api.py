@@ -8,7 +8,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from starlette.middleware.base import BaseHTTPMiddleware
 from pydantic import BaseModel,Field
 from agent import MODEL,VISION_MODEL,run_agent,stream_agent
-from config import ALLOW_SHELL,DB_PATH,FILE_ROOT,ensure_directories
+from config import ALLOW_SHELL,DB_PATH,FILE_ROOT,REQUIRE_PERSISTENT_DB,ensure_directories
 from db import connect
 from tools import init_db,recall_memories,remember_fact,load_history,list_sessions,set_chat_title,get_chat_title,delete_chat,remove_last_assistant,remove_last_turn,save_turn
 from memory import init_semantic_store,index_document,search_rag,rag_source_status,delete_semantic_memory,delete_rag_source,remember_semantic
@@ -32,7 +32,9 @@ def _check_chat_rate_limit(key):
         for k,v in list(_chat_attempts.items()):
             if not v or v[-1]<cutoff:_chat_attempts.pop(k,None)
 
-ensure_directories(); init_db(); init_semantic_store(); init_connectors_db(); init_preferences_db(); init_auth_db()
+ensure_directories()
+if REQUIRE_PERSISTENT_DB and not os.getenv("DATABASE_URL","").strip(): raise RuntimeError("REQUIRE_PERSISTENT_DB is enabled but DATABASE_URL is not configured.")
+init_db(); init_semantic_store(); init_connectors_db(); init_preferences_db(); init_auth_db()
 
 app=FastAPI(title="Personal AI Assistant API",version="1.0.0",description="REST API for a single-user personal AI assistant.")
 origins=[x.strip() for x in os.getenv("CORS_ORIGINS","http://localhost:3000,http://localhost:5173").split(",") if x.strip()]
@@ -79,7 +81,7 @@ class RAGDocumentRequest(BaseModel):
     source:str=Field(...,min_length=1,max_length=500); content:str=Field(...,min_length=1,max_length=200000)
 
 @app.get("/health")
-def health(): return {"status":"ok","service":"personal-ai-assistant","model":MODEL,"shell_enabled":ALLOW_SHELL}
+def health(): return {"status":"ok","service":"personal-ai-assistant","model":MODEL,"shell_enabled":ALLOW_SHELL,"database":"postgresql" if os.getenv("DATABASE_URL","").strip() else "sqlite","persistent_database":bool(os.getenv("DATABASE_URL","").strip())}
 @app.get("/api/v1/info")
 def info(): return {"name":"Personal AI Assistant","version":"1.0.0","model":MODEL,"shell_enabled":ALLOW_SHELL,"mode":"single-user"}
 
@@ -221,13 +223,25 @@ def chat_stream(request:ChatRequest,raw_request:Request):
     if not os.getenv("GROQ_API_KEY"):raise HTTPException(status_code=503,detail="GROQ_API_KEY is not configured.")
     images,sources=_attachments(request.attachment_paths)
     def event_stream():
-        yield "event: start\ndata: "+json.dumps({"session_id":request.session_id})+"\n\n"
+        yield "event: start
+data: "+json.dumps({"session_id":request.session_id})+"
+
+"
         try:
             for chunk in stream_agent(request.message,session_id=request.session_id,image_urls=images,rag_sources=sources or None,memory_enabled=request.memory,web_search_enabled=request.web_search):
-                yield "event: delta\ndata: "+json.dumps({"text":chunk},ensure_ascii=False)+"\n\n"
-            yield "event: done\ndata: {}\n\n"
+                yield "event: delta
+data: "+json.dumps({"text":chunk},ensure_ascii=False)+"
+
+"
+            yield "event: done
+data: {}
+
+"
         except Exception:
-            logger.exception("Streaming request failed"); yield "event: error\ndata: "+json.dumps({"detail":"Streaming request failed."})+"\n\n"
+            logger.exception("Streaming request failed"); yield "event: error
+data: "+json.dumps({"detail":"Streaming request failed."})+"
+
+"
     return StreamingResponse(event_stream(),media_type="text/event-stream",headers={"Cache-Control":"no-cache","Connection":"keep-alive","X-Accel-Buffering":"no"})
 
 @app.get("/api/v1/chats")
