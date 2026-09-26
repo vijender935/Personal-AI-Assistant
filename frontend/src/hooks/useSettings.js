@@ -1,4 +1,4 @@
-import {useCallback,useEffect,useState} from "react";
+import {useCallback,useState} from "react";
 
 export const DEFAULT_SETTINGS={
  appearance:"System",
@@ -24,7 +24,6 @@ export default function useSettings({API,token,notify}){
   }catch(e){notify(e.message||"Could not load settings")}
  },[API,token,notify]);
 
- useEffect(()=>{if(token)loadSettings()},[token,loadSettings]);
 
  const updateSettings=useCallback(async(patch)=>{
   setSettingsLoading(true);
