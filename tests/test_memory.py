@@ -9,7 +9,7 @@ def test_rag_round_trip_and_source_scope(monkeypatch,tmp_path):
  assert memory.index_document("report.txt","Python FastAPI backend")==1
  assert memory.index_document("notes.txt","car maintenance")==1
  hits=memory.search_rag("FastAPI",sources=["report.txt"]);assert hits and hits[0]["source"]=="report.txt"
- assert memory.search_rag("FastAPI",sources=["notes.txt"])==[]
+ assert memory.search_rag("FastAPI",sources=["notes.txt"]) == []
 def test_replace_source(monkeypatch,tmp_path):
  _setup(monkeypatch,tmp_path);memory.index_document("doc.txt","old content");memory.index_document("doc.txt","new content",replace_source=True)
  assert memory.search_rag("new",sources=["doc.txt"])[0]["content"]=="new content"
