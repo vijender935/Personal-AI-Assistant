@@ -27,7 +27,10 @@ logger = logging.getLogger(__name__)
 
 AUTH_RATE_LIMIT = max(1, int(os.getenv("AUTH_RATE_LIMIT", "10")))
 AUTH_RATE_WINDOW = max(1, int(os.getenv("AUTH_RATE_WINDOW", "60")))
+CHAT_RATE_LIMIT = max(1, int(os.getenv("CHAT_RATE_LIMIT", "30")))
+CHAT_RATE_WINDOW = max(1, int(os.getenv("CHAT_RATE_WINDOW", "60")))
 _auth_attempts: dict[str, list[float]] = {}
+_chat_attempts: dict[str, list[float]] = {}
 
 def _check_auth_rate_limit(key: str) -> None:
     now = time.monotonic()
@@ -47,6 +50,20 @@ def _check_auth_rate_limit(key: str) -> None:
 
 def _client_key(request) -> str:
     return request.client.host if request.client else "unknown"
+
+def _check_chat_rate_limit(key: str) -> None:
+    now = time.monotonic()
+    attempts = [stamp for stamp in _chat_attempts.get(key, []) if now - stamp < CHAT_RATE_WINDOW]
+    if len(attempts) >= CHAT_RATE_LIMIT:
+        raise HTTPException(status_code=429, detail="Too many chat requests. Try again later.")
+    attempts.append(now)
+    _chat_attempts[key] = attempts
+
+    if len(_chat_attempts) > 10000:
+        cutoff = now - CHAT_RATE_WINDOW
+        for bucket_key, bucket in list(_chat_attempts.items()):
+            if not bucket or bucket[-1] < cutoff:
+                _chat_attempts.pop(bucket_key, None)
 
 ensure_directories()
 init_db()
@@ -264,7 +281,8 @@ def chat(request: ChatRequest, user=Depends(current_user)):
 
 
 @app.post("/api/v1/chat/stream")
-def chat_stream(request: ChatRequest, user=Depends(current_user)):
+def chat_stream(request: ChatRequest, raw_request: Request, user=Depends(current_user)):
+    _check_chat_rate_limit(f"stream:{user['id']}:{_client_key(raw_request)}")
     if not os.getenv("GROQ_API_KEY"):
         raise HTTPException(status_code=503, detail="GROQ_API_KEY is not configured.")
     attachment_urls = []
