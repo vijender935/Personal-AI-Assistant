@@ -34,13 +34,13 @@ function App(){
  useEffect(()=>{if(!token||!user)return;fetch(API+"/api/v1/chats",{headers:{Authorization:"Bearer "+token}}).then(async r=>{if(!r.ok)return;const d=await r.json();if(d.chats?.length){const normalized=d.chats.map(c=>({...c,id:c.session_id,messages:normalizeMessages(c.messages)}));setChats(normalized);setActive(normalized[0].id)}}).catch(()=>{});},[token,user]);
  useEffect(()=>{if(!token||!user||!active||active==="new")return;let cancelled=false;fetch(API+"/api/v1/chats/"+encodeURIComponent(active),{headers:{Authorization:"Bearer "+token}}).then(async r=>{if(!r.ok)return;const d=await r.json();if(cancelled)return;setChats(cs=>cs.map(c=>c.id===active?{...c,messages:normalizeMessages(d.messages||[])}:c));}).catch(()=>{});return()=>{cancelled=true}},[active,token,user]);
 
- useEffect(()=>{if(user){loadFiles();loadConnectors();loadMemories()}},[user]);
+ useEffect(()=>{if(user){loadFiles();loadConnectors();loadMemories();loadSettings()}},[user]);
  useEffect(()=>{if(settings){setWebSearch(settings.web_search);setMemory(settings.memory)}},[settings.web_search,settings.memory]);
  const {chat,update,regenerate,editLastUser,send,stopStream,newChat}=useChat({API,token,chats,setChats,active,setActive,text,setText,attachments,setAttachments,loading,setLoading,notify,webSearch,memory});
  const {files,uploading,loadFiles,uploadFile,deleteFile,confirmDeleteFile,downloadFile}=useFiles({API,token,notify,setAttachments,requestDelete:setConfirmState});
  const {memories,memoryForm,setMemoryForm,loadMemories,saveMemory,deleteMemory}=useMemory({API,token,notify});
  const {connectors,connectorForm,setConnectorForm,connectorLoading,connectorTesting,loadConnectors,addConnector,testConnector,deleteConnectorById}=useMCP({API,token,notify});
- const {settings,settingsLoading,updateSettings}=useSettings({API,token,notify});
+ const {settings,settingsLoading,loadSettings,updateSettings}=useSettings({API,token,notify});
 
 
 
