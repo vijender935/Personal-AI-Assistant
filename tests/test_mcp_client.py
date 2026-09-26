@@ -65,3 +65,15 @@ def test_mcp_execution_rejects_disallowed_tool(monkeypatch):
     with pytest.raises(PermissionError):
         import asyncio
         asyncio.run(mcp_client._call_async("github", "delete_repository", {}))
+
+
+def test_mcp_connector_header_persistence(monkeypatch, tmp_path):
+    import connectors
+    monkeypatch.setattr(connectors, "DB_PATH", str(tmp_path / "mcp.sqlite3"))
+    monkeypatch.setattr(connectors, "ensure_directories", lambda: None)
+    monkeypatch.delenv("ALLOW_LOCAL_MCP", raising=False)
+    connector = connectors.upsert_connector(1, "github", "streamable-http", "https://example.com/mcp", headers={"Authorization": "Bearer secret", "X-MCP-Toolsets": "repos"})
+    assert connector["headers"]["Authorization"] == "Bearer secret"
+    assert connector["headers"]["X-MCP-Toolsets"] == "repos"
+    updated = connectors.upsert_connector(1, "github", "streamable-http", "https://example.com/mcp", headers={"Authorization": "Bearer new"})
+    assert updated["headers"] == {"Authorization": "Bearer new"}
