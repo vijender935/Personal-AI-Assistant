@@ -37,13 +37,10 @@ function App(){
  useEffect(()=>{if(user){loadFiles();loadConnectors();loadMemories();loadSettings()}},[user]);
  useEffect(()=>{if(settings){setWebSearch(userSettings.web_search);setMemory(userSettings.memory)}},[userSettings.web_search,userSettings.memory]);
  const {chat,update,regenerate,editLastUser,send,stopStream,newChat}=useChat({API,token,chats,setChats,active,setActive,text,setText,attachments,setAttachments,loading,setLoading,notify,webSearch,memory});
+ const {settings:userSettings,settingsLoading,loadSettings,updateSettings}=useSettings({API,token,notify});
  const {files,uploading,loadFiles,uploadFile,deleteFile,confirmDeleteFile,downloadFile}=useFiles({API,token,notify,setAttachments,requestDelete:setConfirmState});
  const {memories,memoryForm,setMemoryForm,loadMemories,saveMemory,deleteMemory}=useMemory({API,token,notify});
  const {connectors,connectorForm,setConnectorForm,connectorLoading,connectorTesting,loadConnectors,addConnector,testConnector,startOAuth,deleteConnectorById}=useMCP({API,token,notify});
- const {settings:userSettings,settingsLoading,loadSettings,updateSettings}=useSettings({API,token,notify});
-
-
-
 
  async function logout(){try{if(token)await fetch(API+"/api/v1/auth/logout",{method:"POST",headers:{Authorization:"Bearer "+token}})}catch(e){}localStorage.removeItem("personal_ai_token");setUser(null);setChats(initial);setActive("new");}
  async function authSubmit(){
