@@ -40,7 +40,8 @@ export default function useChat({API,token,chats,setChats,active,setActive,text,
 
  async function send(){
   const message=text.trim();
-  if(!message||loading||!chat)return;
+  if(!message||loading||sendingRef.current||!chat)return;
+  sendingRef.current=true;
   const controller=new AbortController();setStreamController(controller);
   const next=[...chat.messages,{role:"user",content:message},{role:"assistant",content:""}];
   update(next);setText("");setLoading(true);
