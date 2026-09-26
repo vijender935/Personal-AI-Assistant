@@ -223,25 +223,13 @@ def chat_stream(request:ChatRequest,raw_request:Request):
     if not os.getenv("GROQ_API_KEY"):raise HTTPException(status_code=503,detail="GROQ_API_KEY is not configured.")
     images,sources=_attachments(request.attachment_paths)
     def event_stream():
-        yield "event: start
-data: "+json.dumps({"session_id":request.session_id})+"
-
-"
+        yield "event: start\ndata: "+json.dumps({"session_id":request.session_id})+"\n\n"
         try:
             for chunk in stream_agent(request.message,session_id=request.session_id,image_urls=images,rag_sources=sources or None,memory_enabled=request.memory,web_search_enabled=request.web_search):
-                yield "event: delta
-data: "+json.dumps({"text":chunk},ensure_ascii=False)+"
-
-"
-            yield "event: done
-data: {}
-
-"
+                yield "event: delta\ndata: "+json.dumps({"text":chunk},ensure_ascii=False)+"\n\n"
+            yield "event: done\ndata: {}\n\n"
         except Exception:
-            logger.exception("Streaming request failed"); yield "event: error
-data: "+json.dumps({"detail":"Streaming request failed."})+"
-
-"
+            logger.exception("Streaming request failed"); yield "event: error\ndata: "+json.dumps({"detail":"Streaming request failed."})+"\n\n"
     return StreamingResponse(event_stream(),media_type="text/event-stream",headers={"Cache-Control":"no-cache","Connection":"keep-alive","X-Accel-Buffering":"no"})
 
 @app.get("/api/v1/chats")
