@@ -16,7 +16,8 @@ export function getEditableLastUser(messages){
 }
 
 export default function useChat({API,token,chats,setChats,active,setActive,text,setText,attachments,setAttachments,loading,setLoading,notify,webSearch,memory}){
- const [streamController,setStreamController]=useState(null);\n const sendingRef=useRef(false);
+ const [streamController,setStreamController]=useState(null);
+ const sendingRef=useRef(false);
  const chat=chats.find(c=>c.id===active)||chats[0];
 
  function update(messages){
