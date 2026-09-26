@@ -8,7 +8,7 @@ async function responseDetail(response,fallback){
  try{const data=await response.json();return data.detail||fallback}catch{return fallback}
 }
 
-export default function useFiles({API,token,notify,setAttachments}){
+export default function useFiles({API,token,notify,setAttachments,requestDelete}){
  const [files,setFiles]=useState([]);
  const [uploading,setUploading]=useState(false);
 
@@ -36,7 +36,11 @@ export default function useFiles({API,token,notify,setAttachments}){
   finally{setUploading(false)}
  }
 
- function deleteFile(path){return {type:"file",path,message:"Delete this file? This also removes its indexed content."};}
+ function deleteFile(path){
+  const confirmation={type:"file",path,message:"Delete this file? This also removes its indexed content."};
+  if(requestDelete) requestDelete(confirmation);
+  return confirmation;
+ }
 
  async function confirmDeleteFile(path){
   try{
