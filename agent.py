@@ -116,7 +116,7 @@ def _prepare_goal(goal, user_id):
         except Exception as exc:
             logger.warning("Semantic memory unavailable: %s", exc)
 
-def run_agent(goal, session_id="default", user_id=0, image_urls=None, rag_sources=None, verbose=True):
+def run_agent(goal, session_id="default", user_id=0, image_urls=None, rag_sources=None, verbose=True, memory_enabled=True, web_search_enabled=True):
     goal = goal.strip()
     if not goal:
         return "Please enter a message."
