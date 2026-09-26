@@ -5,11 +5,9 @@ import os
 def _database_url():
     url=os.getenv("DATABASE_URL","").strip()
     if not url:
-        raise RuntimeError("DATABASE_URL is required. SQLite is not supported.")
+        raise RuntimeError("DATABASE_URL is required.")
     return url
 
-def using_postgres():
-    return True
 
 class PostgresConnection:
     def __init__(self,dsn):
